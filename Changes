@@ -1,0 +1,6 @@
+Revision history for Perl extension SWF::Builder.
+
+0.01  Mon Dec 15 22:45:00 2003
+	- First release.
+	  Shape, embedded TTF font, static text, JPEG and lossless bitmap,
+	  movie clip, and actionscript compiler are supported.

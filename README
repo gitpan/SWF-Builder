@@ -1,0 +1,53 @@
+SWF::Builder - creates FLASH(R) movie (SWF) files.
+This package contains:
+
+  SWF::Builder               - Main module.
+  SWF::Builder::ActionScript - SWF ActionScript object.
+  SWF::Builder::ActionScript::Compiler
+                             - SWF ActionScript compiler.
+  SWF::Builder::Bitmap       - SWF Bitmap object.
+  SWF::Builder::Bitmap::Lossless::*
+                             - Drivers for SWF Bitmap object.
+  SWF::Builder::Font         - SWF font object.
+  SWF::Builder::Gradient     - SWF gradient object.
+  SWF::Builder::MovieClip    - SWF movie clip object.
+  SWF::Builder::Shape        - SWF shape object.
+  SWF::Builder::Text         - SWF static text object.
+  SWF::Builder::ExElement
+
+See each POD for further information.
+
+PREREQUISITE
+
+perl 5.8 or higher
+SWF::File 0.27 or higher
+Font::TTF
+
+INSTALLATION
+
+You install SWF modules by the usual method:
+
+  perl Makefile.PL
+  make
+  make test
+  make install
+
+
+SCRIPTS
+
+Following scripts and SWF movie are included in this archive.
+
+ asc.plx  - ActionScript compiler
+ mctest.plx  - Sample script
+ tracewindow.swf 
+           - Debug window movie.
+             It displays results of trace actions compiled with "Trace=>'lcwin'".
+
+
+COPYRIGHT
+    Copyright 2000-2003, Yasuhiro Sasama (ySas), <ysas@nmt.ne.jp>
+
+This library is free software; you can redistribute it and/or
+modify it under the same terms as Perl itself.
+
+

@@ -1,0 +1,26 @@
+Changes
+Makefile.PL
+MANIFEST
+README
+lib/SWF/Builder.pm
+lib/SWF/Builder/ActionScript.pm
+lib/SWF/Builder/Bitmap.pm
+lib/SWF/Builder/ExElement.pm
+lib/SWF/Builder/Font.pm
+lib/SWF/Builder/Gradient.pm
+lib/SWF/Builder/MovieClip.pm
+lib/SWF/Builder/Shape.pm
+lib/SWF/Builder/Text.pm
+lib/SWF/Builder/ActionScript/Compiler.pm
+lib/SWF/Builder/Bitmap/Lossless/Custom.pm
+lib/SWF/Builder/Bitmap/Lossless/GD.pm
+lib/SWF/Builder/Bitmap/Lossless/ImageMagick.pm
+scripts/asc.plx
+scripts/mctest.plx
+scripts/mctest.swf
+scripts/tracewindow.swf
+t/movie.t
+t/compiler.t
+t/test.ttf
+
+META.yml                                 Module meta-data (added by MakeMaker)
