@@ -1,7 +1,12 @@
 Revision history for Perl extension SWF::Builder.
 
+0.08 Sat Feb  5 22:27:33 2005
+	- Support MP3 sound. (Referred to MPEG::Audio::Frame. Thanks to Yuval Kogman)
+	- Change the arguments of 'new_bitmap' method (Incompatiple with 0.07 and before)
+	- Fixed ActionScript compiler/assembler bugs. (Thanks to Peter Suschlik)
+
 0.07 Mon Oct  4 23:43:27 2004
- 	- Fixed many ActionScript compiler bugs and warnings.
+ 	- Fixed many ActionScript compiler bugs and warnings. (Thanks to Peter Suschlik)
 		- An array literal was initialized in reversed order.
 		- A string literal ended with escaped quotation mark was parsed wrongly.
 		- Labels did not quote properly when switch statement was compiled.
@@ -15,7 +20,7 @@ Revision history for Perl extension SWF::Builder.
 		- SVG-compatible path drawing
 
 0.06 Thu Sep 10 00:00:30 2004
-	- Fixed @SWF::Builder::Character::Bitmap::JPEG::ISA.
+	- Fixed @SWF::Builder::Character::Bitmap::JPEG::ISA. (Thanks to Jos.ANi Venceslau)
 	- Support SWF version control (6 or later).
 	- Fixed many ActionScript compiler bugs.
 	- Changed optimization option of AS compiler.
@@ -34,7 +39,7 @@ Revision history for Perl extension SWF::Builder.
 
 0.04 Sat Mar 13 20:00:00 2004
 	- UTF8 flag is properly cleared now.
- 	- Fixed wrong calculation of a shape boundary box.
+ 	- Fixed wrong calculation of a shape boundary box. (Thanks to Jon Orwant)
 	- Fixed converting a lossless bitmap with alpha map.
 
 0.03 Tue Dec 23 22:05:00 2003
@@ -45,6 +50,7 @@ Revision history for Perl extension SWF::Builder.
 
 0.02 Wed Dec 17 20:30:00 2003
 	- Fixed ActionScript compiler to handle 'infinity' and 'NaN' properly.
+						(Thanks to Peter Sergeant)
 
 0.01 Mon Dec 15 22:45:00 2003
 	- First release.

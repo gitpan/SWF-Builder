@@ -21,7 +21,7 @@ This package contains:
 
 See each POD for further information.
 
-PREREQUISITE
+PREREQUISITES
 
 perl 5.8 or higher
 SWF::File 0.27 or higher

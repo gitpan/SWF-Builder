@@ -9,7 +9,7 @@ use SWF::Builder::ExElement;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.032";
+our $VERSION="0.04";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -164,11 +164,10 @@ sub _pack {
 	$tag = SWF::Element::Tag::DefineBitsJPEG3->new
 	    ( CharacterID => $self->{ID});
 	if ($self->{_alphafile}) {
-	    local $/ = \4096;
 	    my $z = deflateInit() or croak "Can't create zlib stream ";
 	    open my $af, "<", $self->{_alphafile} or Carp::croak "Can't open ".$self->{_alphafile};
 	    binmode $af;
-	    while(defined(my $d = <$af>)) {
+	    while(read($af, my $d, 4096) > 0) {
 		my ($out, $status) = $z->deflate(\$d);
 		defined $out or croak "Zlib raised an error $status ";
 		$tag->BitmapAlphaData->add($out);
@@ -202,13 +201,29 @@ use Compress::Zlib;
 @SWF::Builder::Character::Bitmap::Lossless::ISA = qw/ SWF::Builder::Character::Bitmap::Def /;
 
 sub new {
-    my ($class, $type, $obj) = @_;
+    my ($class, $obj, $type) = @_;
+
+    unless (defined($type)) {
+	if (UNIVERSAL::isa($obj, 'GD')) {
+	    $type = 'GD';
+	} elsif (UNIVERSAL::isa($obj, 'Image::Magick')) {
+	    $type = 'ImageMagick';
+	} elsif (not ref($obj)) {
+	    if ($obj =~/\.png$/i or $obj =~/\.jpe?g$/i or $obj =~ /\.xpm$/i or $obj =~ /\.gd2$/i) {
+		$type = 'GD';
+	    } else {
+		$type = 'ImageMagick';
+	    }
+	} else {
+	    croak "Unknown bitmap object";
+	}
+    }
 
     my $package = "SWF::Builder::Character::Bitmap::Lossless::$type";
     eval "require $package";
     if ($@) {
 	croak "Bitmap type '$type' is not supported" if $@=~/^Can\'t locate/;
-	die $@;
+	die;
     }
     my $self = $package->new($obj);
     $self->_init_character;
@@ -346,9 +361,12 @@ set a JPEG/Alpha data.
 
 load a JPEG/alpha data file.
 
-=item $ll_bm = $mc->new_bitmap( $type => $obj )
+=item $ll_bm = $mc->new_bitmap( $obj [, $type] )
 
 returns a new lossless bitmap converted from a $type of $obj.
+If $type is omitted, it is guessed.
+If $obj is not an object, it is treated as a file name.
+
 Acceptable types are as follows:
 
 =over 4

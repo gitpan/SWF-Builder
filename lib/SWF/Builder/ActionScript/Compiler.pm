@@ -11,7 +11,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_06';
+our $VERSION = '0.00_07';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -42,7 +42,7 @@ BEGIN {
 }
 
 use constant \%O;
-		
+
 sub new {
     my $class = shift;
     my $text = shift;
@@ -119,7 +119,7 @@ sub assemble {
     my ($self, $actions) = @_;
     my $option = $actions||'';
 
-    push @{$self->{stat}{code}}, grep /[^#]/, split /$nl/, $self->{text};
+    push @{$self->{stat}{code}}, grep /[^#]/, split /[$nl]/, $self->{text};
     $self->_tidy_up;
     $self->_code_print, return if $option eq 'text';
     $actions = SWF::Element::Array::ACTIONRECORDARRAY->new unless ref($actions);
@@ -1031,7 +1031,7 @@ sub conditional_expression {
 	my @unaryop = $self->_get_token;
 
 	if ($unaryop[1] eq 'UnaryOp' or $unaryop[0] eq '-' or $unaryop[0] eq '+') {
-	    my $e = $self->unary_expression;
+	    my $e = $self->unary_expression or $self->_error('Syntax error');
 	    if ($self->{stat}{Optimize} & O_CONSTEXP and 
 		$e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
 		return $literal_unaryop{$unaryop[0]}->($e);

@@ -1,13 +1,19 @@
 package SWF::Builder::Character::Bitmap::Lossless::ImageMagick;
 
 use strict;
+use Image::Magick;
 
 our @ISA = ('SWF::Builder::Character::Bitmap::Lossless');
-our $VERSION = '0.011';
+our $VERSION = '0.02';
 
 sub new {
     my ($class, $image) = @_;
 
+    unless (ref($image)) {
+	my $file = $image;
+	$image = Image::Magick->new;
+	$image->Read($file);
+    }
     bless {
 	_width  => $image->Get('width'),
 	_height => $image->Get('height'),

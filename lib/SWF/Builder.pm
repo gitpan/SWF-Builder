@@ -9,60 +9,16 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
-
-@SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');
 
 sub new {
     my $class = shift;
-    my %param = @_;
-    my $version = $param{Version} || 6;
     my $self = bless {
-	_file =>
-	  SWF::File->new(undef,
-			 Version => $version,
-			 FrameRate => $param{FrameRate},
-			 FrameSize => [ map {$_*20} @{$param{FrameSize}}],
-			 ),
-	_backgroundcolor => $param{BackgroundColor},
 	_root =>
-	  SWF::Builder::Movie::Root->new(Version => $version)
+	  SWF::Builder::Movie::Root->new(@_)
     }, $class;
-    $self->_init_is_alpha;
     $self;
-
-}
-
-sub FrameRate {
-    my $self = shift;
-    $self->{_file}->FrameRate(@_);
-}
-
-sub FrameSize {
-    my $self = shift;
-    $self->{_file}->FrameSize(map {$_*20} @_);
-}
-
-sub BackgroundColor {
-    my ($self, $color) = @_;
-    $self->{_backgroundcolor} = $color if defined $color;
-    $self->{_backgroundcolor};
-}
-
-sub compress {
-    my $self = shift;
-    $self->{_file}->compress(@_);
-}
-
-sub save {
-    my ($self, $file) = @_;
-    my $stream = $self->{_file};
-
-    $self->{_is_alpha}->configure(0);
-  SWF::Element::Tag::SetBackgroundColor->new(BackgroundColor => $self->_add_color($self->{_backgroundcolor}))->pack($stream);
-    $self->{_root}->pack($stream);
-    $stream->close($file);
 }
 
 sub AUTOLOAD {
@@ -74,7 +30,6 @@ sub AUTOLOAD {
     croak "Can't locate object method \"$sub\" via package \"".ref($self).'" (perhaps you forgot to load "'.ref($self).'"?)' unless $self->{_root}->can($sub);
     $self->{_root}->$sub(@_);
 }
-
 
 sub DESTROY {
     my $r = shift->{_root};
@@ -145,6 +100,7 @@ sub new {
 
     my $self = bless {
 	_frame_list => SWF::Builder::_FrameList->new,
+	_streamsoundf => 0,
     }, $class;
     $self->{_depth_list} = SWF::Builder::Depth->new($self);
 
@@ -241,6 +197,14 @@ sub new_bitmap {
     $self->_new_character(SWF::Builder::Character::Bitmap::Lossless->new(@_));
 }
 
+sub new_sound {
+    require SWF::Builder::Character::Sound;
+
+    my $self = shift;
+
+    $self->_new_character(SWF::Builder::Character::Sound::Def->new(@_));
+}
+
 sub import_asset {
     my $self = shift;
 
@@ -309,19 +273,29 @@ sub _destroy {
 package SWF::Builder::Movie::Root;
 use Carp;
 
-use base qw/ SWF::Builder::Movie /;
+use base qw/ SWF::Builder::Movie SWF::Builder::ExElement::Color::AddColor /;
 
 sub new {
     my $class = shift;
     my %param = @_;
+    my $version = $param{Version} || 6;
+
     my $self = $class->SUPER::new;
 
+    $self->{_file} = SWF::File->new
+	( undef,
+	  Version => $version,
+	  FrameRate => $param{FrameRate},
+	  FrameSize => [ map {$_*20} @{$param{FrameSize}}],
+	  );
+    $self->{_backgroundcolor} = $param{BackgroundColor};
     $self->{_root} = $self;
     $self->{_character_IDs} = [];
     $self->{_ID_seed} = 1;
     $self->{_target_path} = '_root';
     $self->{_to_destroy} = [];
-    $self->{_version} = $param{Version};
+    $self->{_version} = $version;
+    $self->_init_is_alpha;
     $self;
 }
 
@@ -339,12 +313,42 @@ sub pack {
 
 }
 
+sub save {
+    my ($self, $file) = @_;
+    my $stream = $self->{_file};
+
+    $self->{_is_alpha}->configure(0);
+  SWF::Element::Tag::SetBackgroundColor->new(BackgroundColor => $self->_add_color($self->{_backgroundcolor}))->pack($stream);
+    $self->{_root}->pack($stream);
+    $stream->close($file);
+}
+
 sub _depends {
     my ($self, $char, $frame) = @_;
 
     push @{$self->{_frame_list}[$frame-1]}, $char;
 }
 
+sub FrameRate {
+    my $self = shift;
+    $self->{_file}->FrameRate(@_);
+}
+
+sub FrameSize {
+    my $self = shift;
+    $self->{_file}->FrameSize(map {$_*20} @_);
+}
+
+sub BackgroundColor {
+    my ($self, $color) = @_;
+    $self->{_backgroundcolor} = $color if defined $color;
+    $self->{_backgroundcolor};
+}
+
+sub compress {
+    my $self = shift;
+    $self->{_file}->compress(@_);
+}
 
 sub _destroy {
     my $self = shift;
@@ -515,7 +519,7 @@ See L<SWF::Builder::Gradient> and L<SWF::Builder::Character::Shape> for the deta
 returns a new JPEG bitmap (type: Bitmap).
 See L<SWF::Builder::Character::Bitmap> for the detail.
 
-=item $mc->new_bitmap( $type => $obj )
+=item $mc->new_bitmap( $obj [, $type] )
 
 returns a new lossless bitmap (type: Bitmap).
 See L<SWF::Builder::Character::Bitmap> for the detail.
