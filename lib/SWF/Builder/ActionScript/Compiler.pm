@@ -11,7 +11,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_05';
+our $VERSION = '0.00_06';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -132,8 +132,8 @@ sub assemble {
 
 
 my %reserved = (
-		null       => [undef, 'NULLLiteral'],
-		undefined  => [undef, 'UNDEFLiteral'],
+		null       => ['', 'NULLLiteral'],
+		undefined  => ['', 'UNDEFLiteral'],
 		true       => [1, 'BooleanLiteral'],
 		false      => [0, 'BooleanLiteral'],
 		newline    => ["\n", 'StringLiteral'],
@@ -271,14 +271,14 @@ sub _get_token {
 		my $key = $1;
 		return ((ref($reserved{$key})? @{$reserved{$key}} : ($key, $reserved{$key}||(exists $property{lc($key)} ? 'Property' : 'Identifier'))), $ln);
 	    };
-	s/\A\"((\\.|[^"])*)\"//s
+	s/\A\"((?>(?:[^"\\]|\\.)*))\"//s
 	    and do {
 		my $s = $1;
 		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
                 $s=~s/(\\*)\'/$1.(length($1)%2==1?"'":"\\'")/ge;
 		return ($s, 'StringLiteral', $ln);
 	    };
-	s/\A\'((\\.|[^'])*)\'//s
+	s/\A\'((?>(?:[^'\\]|\\.)*))\'//s
 	    and do {
 		my $s = $1;
 		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
@@ -1029,7 +1029,7 @@ sub conditional_expression {
     sub unary_expression {
 	my $self = shift;
 	my @unaryop = $self->_get_token;
-	
+
 	if ($unaryop[1] eq 'UnaryOp' or $unaryop[0] eq '-' or $unaryop[0] eq '+') {
 	    my $e = $self->unary_expression;
 	    if ($self->{stat}{Optimize} & O_CONSTEXP and 
@@ -1203,7 +1203,7 @@ sub call_or_member_expression {
 		last;
 	    };
 	    /^Function$/ and do{
-		push @tree, $self->function_expression;
+		push @tree, $self->function_expression('');
 		last;
 	    };
 	    /^New$/ and do {
@@ -1433,6 +1433,7 @@ sub expression {
 sub expression_statement {
     my $self = shift;
     my $e = $self->expression or $self->_error('Syntax error');
+    $self->_statement_terminator;
     my $n = $self->new_node('ExpressionStatement');
     $n->add_node($e);
     return $n;
@@ -1475,7 +1476,7 @@ sub _code_print {
 		  If             => [qw/ : BranchOffset /],
 		  GotoFrame2     => [qw/ PlayFlag /],
 		  StoreRegister  => [qw/ Register /],
-		  With           => [qw/ CodeSize /],
+		  With           => [qw/ : CodeSize /],
 		  );
 
     sub _encode {
@@ -1793,7 +1794,7 @@ TIDYUP:
 	my $var = $self->{node}[0];
 
 	if ($regvars and exists $regvars->{$var}) {
-	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop', -2 if $context eq 'lvalue';
+	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop', -2 if defined($context) and $context eq 'lvalue';
 	} else {
 	    push @$code, "Push String '$var'", ($context eq 'lvalue' ? ("DefineLocal", -1) : ("DefineLocal2"));
 	}
@@ -2491,7 +2492,7 @@ TIDYUP:
 	($context =~/lc?value/) and SWF::Builder::ActionScript::SyntaxNode::_error("Can't modify literal item");
 	my $code = $self->{stat}{code};
 	my $count = @{$self->{node}};
-	for my $value (@{$self->{node}}) {
+	for my $value (reverse @{$self->{node}}) {
 	    $value->compile('value');
 	}
 	push @$code, "Push Number '$count'", "InitArray";
@@ -2911,7 +2912,7 @@ TIDYUP:
 	    my $label = $stat->{label}++;
 	    push @$code, "PushDuplicate";
 	    $case->{node}[0]->compile('value');
-	    push @$code, "StrictEquals", "If $label";
+	    push @$code, "StrictEquals", "If '$label'";
 	    $case->{label} = $label;
 	}
 	my $default_label = $stat->{label}++;

@@ -5,15 +5,16 @@ use bytes;
 
 use Carp;
 use SWF::Element;
+use SWF::Builder::ExElement;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.031";
+our $VERSION="0.032";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
 sub matrix {
-  SWF::Element::MATRIX->new->scale(20);
+  SWF::Builder::ExElement::MATRIX->new->scale(20);
 }
 
 sub place {
@@ -22,7 +23,7 @@ sub place {
     unless ($self->{_shapetag}) {
 	$self->{_shapetag} = $self->{_parent}->new_shape
 	    ->linestyle('none')
-	    ->fillstyle($self, 'tiled', SWF::Element::MATRIX->new->scale(20))
+	    ->fillstyle($self, 'tiled', matrix())
 	    ->box(0, 0, $self->{_width}, $self->{_height});
     }
     $self->{_shapetag}->place(@_);

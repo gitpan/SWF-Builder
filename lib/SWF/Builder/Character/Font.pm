@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.041";
+our $VERSION="0.05";
 
 our %indirect;
 
@@ -122,11 +122,11 @@ sub new {
 	    $cmap->read;
 	    $loca->read;
 	    $hmtx->read;
-	    my $scale = 1024 / $head->{unitsPerEm};   # 1024(Twips/Em) / S(units/Em) = Scale(twips/units)
+	    my $scale = 1024 / $head->{unitsPerEm};   # 1024(Twips/Em) / S(units/Em) = Scale(twips/unit)
 	    $tag->FontAscent($hhea->{Ascender} * $scale);
 	    $tag->FontDescent(-$hhea->{Descender} * $scale);
 	    $tag->FontLeading($hhea->{LineGap} * $scale);  # ?
-	    $self->{_scale}  = $scale;
+	    $self->{_scale}  = $scale/20; # pixels/unit
 	    $self->{_average_width} = defined($os2) ? $os2->{xAvgCharWidth}*$scale : 512;
 	    $ttft->{_cmap}   = $cmap->{Tables}[1]{val}; # Unicode cmap
 	    $ttft->{_advance}= $hmtx->{advance};
@@ -206,6 +206,80 @@ sub kern {
     return 0;
 }
 
+sub glyph_shape {
+    my ($self, $char) = @_;
+
+    if (exists $self->{_glyph_hash}{$char} and defined $self->{_glyph_hash}{$char}[1]) {
+	return $self->{_glyph_hash}{$char}[1];
+    } else {
+	my $gshape = SWF::Builder::Character::Font::Glyph->new;
+	$self->{_glyph_hash}{$char}[1] = $gshape;
+	return $gshape;
+    }
+}
+
+sub _draw_glyph {
+    my ($self, $c, $gshape) = @_;
+
+    return unless $self->{_embed};
+
+    my $scale = $self->{_scale};
+    my $gid = $self->{_ttf_tables}{_cmap}{ord($c)};
+    my $glyph = $self->{_ttf_tables}{_glyphs}[$gid];
+
+    if (defined $glyph) {
+	$glyph->read_dat;
+
+	my $i = 0;
+	for my $j (@{$glyph->{endPoints}}) {
+	    my @x = map {$_ * $scale} @{$glyph->{x}}[$i..$j];
+	    my @y = map {-$_ * $scale} @{$glyph->{y}}[$i..$j];
+	    my @f = @{$glyph->{flags}}[$i..$j];
+	    $i=$j+1;
+	    my $sx = shift @x;
+	    my $sy = shift @y;
+	    my $f  = shift @f;
+	    unless ($f & 1) {
+		push @x, $sx;
+		push @y, $sy;
+		push @f, $f;
+		if ($f[0] & 1) {
+		    $sx = shift @x;
+		    $sy = shift @y;
+		    $f  = shift @f;
+		} else {
+		    $sx = ($sx+$x[0])/2;
+		    $sy = ($sy+$y[0])/2;
+		    $f = 1;
+		}
+	    }
+	    push @x, $sx;
+	    push @y, $sy;
+	    push @f, $f;
+	    $gshape->moveto($sx, $sy);
+	    while(@x) {
+		my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
+		
+		if ($f) {
+		    $gshape->lineto($x, $y);
+		} else {
+		    my ($ax, $ay);
+		    if ($f[0] & 1) {
+			$ax=shift @x;
+			$ay=shift @y;
+			shift @f;
+		    } else {
+			$ax=($x+$x[0])/2;
+			$ay=($y+$y[0])/2;
+		    }
+		    $gshape->curveto($x, $y, $ax, $ay);
+		}
+	    }
+	}
+    }
+    return $self->{_ttf_tables}{_advance}[$gid] * $scale;
+}
+
 sub add_glyph {
     my ($self, $string, $e_char) = @_;
     my @chars;
@@ -216,7 +290,7 @@ sub add_glyph {
     my $cmap = $self->{_ttf_tables}{_cmap};
     my $glyphs = $self->{_ttf_tables}{_glyphs};
     my $advances = $self->{_ttf_tables}{_advance};
-    my $scale = $self->{_scale};
+    my $scale = $self->{_scale}*20;
     my $tag = $self->{_tag};
 
     if (defined $e_char) {
@@ -228,65 +302,11 @@ sub add_glyph {
     for my $c (@chars) {
 	next if $hash->{$c};
 
-	my $code = ord($c);
-	my $gid = $cmap->{$code};
-	my $adv = $advances->[$gid] * $scale/20;    # twips->pixel
-	my $gshape = SWF::Builder::Character::Font::Glyph->new;
-	my $glyph = $glyphs->[$gid];
-	if (defined $glyph) {
-	    $glyph->read_dat;
-
-	    my $i = 0;
-	    for my $j (@{$glyph->{endPoints}}) {
-		my @x = map {$_ * $scale} @{$glyph->{x}}[$i..$j];
-		my @y = map {-$_ * $scale} @{$glyph->{y}}[$i..$j];
-		my @f = @{$glyph->{flags}}[$i..$j];
-		$i=$j+1;
-		my $sx = shift @x;
-		my $sy = shift @y;
-		my $f  = shift @f;
-		unless ($f & 1) {
-		    push @x, $sx;
-		    push @y, $sy;
-		    push @f, $f;
-		    if ($f[0] & 1) {
-			$sx = shift @x;
-			$sy = shift @y;
-			$f  = shift @f;
-		    } else {
-			$sx = ($sx+$x[0])/2;
-			$sy = ($sy+$y[0])/2;
-			$f = 1;
-		    }
-		}
-		push @x, $sx;
-		push @y, $sy;
-		push @f, $f;
-		$gshape->_moveto_twips($sx, $sy);
-		while(@x) {
-		    my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
-		    
-		    if ($f) {
-			$gshape->_lineto_twips($x, $y);
-		    } else {
-			my ($ax, $ay);
-			if ($f[0] & 1) {
-			    $ax=shift @x;
-			    $ay=shift @y;
-			    shift @f;
-			} else {
-			    $ax=($x+$x[0])/2;
-			    $ay=($y+$y[0])/2;
-			}
-			$gshape->_curveto_twips($x, $y, $ax, $ay);
-		    }
-		}
-	    }
-	}
-	$hash->{$c} = [$adv, $gshape->{_edges}, $gshape->{_bounds}];
+	my $gshape = $self->glyph_shape($c);
+	my $adv = $self->_draw_glyph($c, $gshape);
+	$hash->{$c} = [$adv, $gshape];
     }
 }
-
 
 sub LanguageCode {
     my ($self, $code) = @_;
@@ -329,8 +349,8 @@ sub _pack {
 
     for my $c (sort keys %{$self->{_glyph_hash}}) {
 	push @$code_t, ord($c);
-	push @$adv_t, $hash->{$c}[0]*20;
-	push @$glyph_t, SWF::Element::SHAPE->new(ShapeRecords => $hash->{$c}[1]);
+	push @$adv_t, (defined($hash->{$c}[0]) ? $hash->{$c}[0]*20 : $hash->{$c}[1]{_bounds}->Xmax);
+	push @$glyph_t, SWF::Element::SHAPE->new(ShapeRecords => $hash->{$c}[1]{_edges});
 #	push @$bounds_t, $hash->{$c}[2];
 	push @$bounds_t, $emprect;
     }

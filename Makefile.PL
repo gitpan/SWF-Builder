@@ -12,6 +12,7 @@ WriteMakefile(
 	'SWF::Parser'     => 0,
 	'SWF::Element'    => 0.29,
 	'Font::TTF::Font' => 0.34,
+	'Math::Bezier::Convert' => 0,
     },
     'EXE_FILES' => ['scripts/asc.plx'],
 );

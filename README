@@ -16,6 +16,7 @@ This package contains:
   SWF::Builder::Character::Shape - SWF shape object.
   SWF::Builder::Character::Text  - SWF static text object.
   SWF::Builder::Gradient         - SWF gradient object.
+  SWF::Builder::Shape            - Drawing extention of shapes.
   SWF::Builder::ExElement
 
 See each POD for further information.
@@ -25,6 +26,7 @@ PREREQUISITE
 perl 5.8 or higher
 SWF::File 0.27 or higher
 Font::TTF
+Math::Bezier::Convert
 
 INSTALLATION
 
@@ -40,7 +42,7 @@ SCRIPTS
 
 Following scripts and SWF movie are included in this archive.
 
- asc.plx      - ActionScript compiler.
+ asc.plx      - ActionScript compiler frontend.
  mctest.plx   - Sample script.
  tracewindow.plx
               - Debug window movie. It displays results of trace actions
@@ -53,6 +55,9 @@ Following scripts and SWF movie are included in this archive.
                 It is necessary to change font for other than Windows.
  exportasset.plx & importasset.plx
               - Sample of export and import assets.
+ arctest.plx  - Sample script for elliptic arc. See POD.
+ tiger.plx    - Sample script of 'path' drawing a famous tiger converted from SVG.
+
 
 COPYRIGHT
     Copyright 2000-2003, Yasuhiro Sasama (ySas), <ysas@nmt.ne.jp>

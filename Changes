@@ -1,5 +1,19 @@
 Revision history for Perl extension SWF::Builder.
 
+0.07 Mon Oct  4 23:43:27 2004
+ 	- Fixed many ActionScript compiler bugs and warnings.
+		- An array literal was initialized in reversed order.
+		- A string literal ended with escaped quotation mark was parsed wrongly.
+		- Labels did not quote properly when switch statement was compiled.
+		- Expression statement did not check its terminator ';'.
+		- 'with' did not compiled correctly.
+	- Added many drawing methods for shapes.
+		- Cubic Bezier curve
+		- Rounded rectangle
+		- Circle, ellipse, and arc
+		- Star shape
+		- SVG-compatible path drawing
+
 0.06 Thu Sep 10 00:00:30 2004
 	- Fixed @SWF::Builder::Character::Bitmap::JPEG::ISA.
 	- Support SWF version control (6 or later).

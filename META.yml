@@ -1,13 +1,14 @@
 # http://module-build.sourceforge.net/META-spec.html
 #XXXXXXX This is a prototype!!!  It will change in the future!!! XXXXX#
 name:         SWF-Builder
-version:      0.06
+version:      0.07
 version_from: lib/SWF/Builder.pm
 installdirs:  site
 requires:
     Compress::Zlib:                0
     Font::TTF::Font:               0.34
     Font::TTF::Ttc:                0
+    Math::Bezier::Convert:         0
     SWF::BinStream:                0
     SWF::Element:                  0.29
     SWF::File:                     0

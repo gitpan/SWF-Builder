@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 @SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');

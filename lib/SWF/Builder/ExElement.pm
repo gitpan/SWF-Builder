@@ -6,7 +6,7 @@ use SWF::Element;
 
 require Exporter;
 
-our $VERSION="0.03";
+our $VERSION="0.04";
 @SWF::Builder::ExElement::ISA = ('Exporter');
 
 our @EXPORT = ('utf2bin', '_round');
@@ -181,6 +181,33 @@ sub set_boundary {
     }
 }
 
+#####
+
+package SWF::Builder::ExElement::MATRIX;
+
+@SWF::Builder::ExElement::MATRIX::ISA = ('SWF::Element::MATRIX');
+
+sub moveto {
+    my ($self, $x, $y) = @_;
+    $self->SUPER::moveto($x*20, $y*20);
+}
+
+*translate = \&moveto;
+
+sub _moveto_twips {
+    shift->SUPER::moveto(@_);
+}
+
+sub init {
+    my ($m, $p) = @_;
+
+  Carp::croak "Invalid matrix option" unless ref($p) eq 'ARRAY';
+    while( my ($com, $param) = splice(@$p, 0, 2) ) {
+      Carp::croak "Invalid matrix option '$com'" unless $m->can($com);
+	$m->$com(ref($param) eq 'ARRAY' ? @$param : ($param));
+    }
+    $m;
+}
 
 
 1;

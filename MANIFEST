@@ -7,6 +7,7 @@ lib/SWF/Builder/ActionScript.pm
 lib/SWF/Builder/ActionScript/Compiler.pm
 lib/SWF/Builder/ExElement.pm
 lib/SWF/Builder/Gradient.pm
+lib/SWF/Builder/Shape.pm
 lib/SWF/Builder/Character.pm
 lib/SWF/Builder/Character/Bitmap.pm
 lib/SWF/Builder/Character/Font.pm
@@ -34,6 +35,9 @@ scripts/mctest.plx
 scripts/mctest.swf
 scripts/tracewindow.plx
 scripts/tracewindow.swf
+scripts/arctest.plx
+scripts/tiger.plx
+scripts/tiger.swf
 t/movie.t
 t/compiler.t
 t/test.ttf

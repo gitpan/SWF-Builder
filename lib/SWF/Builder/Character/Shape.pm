@@ -6,365 +6,12 @@ use SWF::Element;
 use SWF::Builder::Character;
 use SWF::Builder::ExElement;
 use SWF::Builder::Gradient;
+use SWF::Builder::Shape;
 
-our $VERSION="0.04";
+our $VERSION="0.05";
 
 @SWF::Builder::Character::Shape::ISA = qw/ SWF::Builder::Character::UsableAsMask /;
 @SWF::Builder::Character::Shape::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Shape /;
-
-####
-
-{
-    package SWF::Builder::Shape;
-
-    use SWF::Builder::ExElement;
-    use Carp;
-
-    sub new {
-	my $class = shift;
-	
-	my $self = bless {
-	    _current_line_width => 1,
-	    _current_X => 0,
-	    _current_Y => 0,
-	    _current_font => undef,
-	    _current_size => 12,
-	    _edges => SWF::Element::SHAPE->ShapeRecords->new,
-	    _bounds => SWF::Builder::ExElement::BoundaryRect->new,
-	}, $class;
-
-	$self->_init;
-	$self->moveto(0,0);
-    }
-
-    sub _init {}
-
-    sub _set_bounds {
-	my ($self, $x, $y) = @_;
-	my $cw = $self->{_current_line_width} * 10;
-
-	$self->{_bounds}->set_boundary($x-$cw, $y-$cw, $x+$cw, $y+$cw);
-    }
-
-    sub _get_stylerecord {
-	my $self = shift;
-	my $edges = $self->{_edges};
-	my $r;
-	if (ref($edges->[-1])=~/STYLECHANGERECORD$/) {
-	    $r = $edges->[-1];
-	} else {
-	    $r = $edges->new_element;
-	    push @$edges, $r;
-	}
-	return $r;
-    }
-
-    sub _set_style {
-	my ($self, %param) = @_;
-	my $r = $self->_get_stylerecord;
-
-	for my $p (qw/ MoveDeltaX MoveDeltaY FillStyle0 FillStyle1 LineStyle /) {
-	    $r->$p($param{$p}) if exists $param{$p};
-	}
-	return $r;
-    }
-
-#### basic drawing ####
-# handling _edges directly
-
-    sub r_lineto {
-	my $self = shift;
-
-	$self->_r_lineto_twips(map $_*20, @_);
-    }
-
-    sub _r_lineto_twips {
-	my $self = shift;
-	my $edges = $self->{_edges};    
-
-	while (my($dx, $dy) = splice(@_, 0, 2)) {
-	    $dx = _round($dx);
-	    $dy = _round($dy);
-	    push @$edges, $edges->new_element( DeltaX => $dx, DeltaY => $dy );
-	    $dx = ($self->{_current_X} += $dx);
-	    $dy = ($self->{_current_Y} += $dy);
-	    $self->_set_bounds($dx, $dy);
-	}
-	$self;
-    }
-
-    sub lineto {
-	my $self = shift;
-
-	$self->_lineto_twips(map $_*20, @_);
-    }
-
-    sub _lineto_twips {
-	my $self = shift;
-	my $edges = $self->{_edges};    
-	
-	while (my($x, $y) = splice(@_, 0, 2)) {
-	    $x = _round($x);
-	    $y = _round($y);
-	    push @$edges, $edges->new_element( DeltaX => $x-$self->{_current_X}, DeltaY => $y-$self->{_current_Y} );
-	    $self->{_current_X} = $x;
-	    $self->{_current_Y} = $y;
-	    $self->_set_bounds($x, $y);
-	}
-	$self;
-    }
-
-    sub r_curveto {
-	my $self = shift;
-
-	$self->_r_curveto_twips(map $_*20, @_);
-    }
-
-    sub _r_curveto_twips {
-	my $self = shift;
-	my $edges = $self->{_edges};    
-
-	while(my($cdx, $cdy, $adx, $ady) = splice(@_, 0, 4)) {
-	    my $curx = $self->{_current_X};
-	    my $cury = $self->{_current_Y};
-	    $cdx = _round($cdx);
-	    $cdy = _round($cdy);
-	    $adx = _round($adx);
-	    $ady = _round($ady);
-	    push @$edges, $edges->new_element
-		(
-		 ControlDeltaX => $cdx,
-		 ControlDeltaY => $cdy,
-		 AnchorDeltaX  => $adx,
-		 AnchorDeltaY  => $ady,
-		 );
-	    $adx = ($self->{_current_X} += $cdx+$adx);
-	    $ady = ($self->{_current_Y} += $cdy+$ady);
-	    $self->_set_bounds($adx, $ady);
-	    $self->_set_bounds($curx+$cdx, $cury+$cdy, 1); # 1: off curve
-	}
-	$self;
-    }
-
-    sub curveto {
-	my $self = shift;
-
-	$self->_curveto_twips(map $_*20, @_);
-    }
-
-    sub _curveto_twips {
-	my $self = shift;
-	my $edges = $self->{_edges};    
-
-	while(my ($cx, $cy, $ax, $ay) = splice(@_, 0, 4)) {
-
-	    my $curx = $self->{_current_X};
-	    my $cury = $self->{_current_Y};
-	    $cx = _round($cx);
-	    $cy = _round($cy);
-	    $ax = _round($ax);
-	    $ay = _round($ay);
-
-	    push @$edges, $edges->new_element
-		(
-		 ControlDeltaX => $cx-$curx,
-		 ControlDeltaY => $cy-$cury,
-		 AnchorDeltaX  => $ax-$cx,
-		 AnchorDeltaY  => $ay-$cy,
-		 );
-	    $self->{_current_X} = $ax;
-	    $self->{_current_Y} = $ay;
-	    $self->_set_bounds($ax, $ay);
-	    $self->_set_bounds($cx, $cy, 1);  # 1: off curve
-	}
-	$self;
-    }
-
-    sub moveto {
-	my ($self, $x, $y)=@_;
-	$self->_moveto_twips($x*20, $y*20);
-    }
-
-    sub _moveto_twips {
-	my ($self, $x, $y)=@_;
-
-	$x = _round($x);
-	$y = _round($y);
-	$self->_set_style(MoveDeltaX => $x, MoveDeltaY => $y);
-	$self->{_current_X} = $x;
-	$self->{_current_Y} = $y;
-	$self->_set_bounds($x, $y);
-	$self;
-    }
-
-    sub r_moveto {
-	my ($self, $dx, $dy)=@_;
-	$self->_r_moveto_twips($dx*20, $dy*20);
-    }
-
-    sub _r_moveto_twips {
-	my ($self, $dx, $dy)=@_;
-
-	$dx = _round($dx);
-	$dy = _round($dy);
-	$dx = $self->{_current_X} + $dx;
-	$dy = $self->{_current_Y} + $dy;
-	$self->_set_style(MoveDeltaX => $dx, MoveDeltaY => $dy);
-	$self->{_current_X} = $dx;
-	$self->{_current_Y} = $dy;
-	$self->_set_bounds($dx, $dy);
-	$self;
-    }
-
-    my %style = ('none' => 0, 'fill' => 1, 'draw' => 1);
-    sub fillstyle {
-	my ($self, $f) = @_;
-	my $index;
-	if (exists $style{$f}) {
-	    $index = $style{$f};
-	} else {
-	    $index = $f;
-	}
-	$self->_set_style(FillStyle0 => $index);
-	$self;
-    }
-    *fillstyle0 = \&fillstyle;
-
-    sub fillstyle1 {
-	my ($self, $f) = @_;
-	my $index;
-	if (exists $style{$f}) {
-	    $index = $style{$f};
-	} else {
-	    $index = $f;
-	}
-	$self->_set_style(FillStyle1 => $index);
-	$self;
-    }
-
-    sub linestyle {
-	my ($self, $f) = @_;
-	my $index;
-	if (exists $style{$f}) {
-	    $index = $style{$f};
-	} else {
-	    $index = $f;
-	}
-	$self->_set_style(LineStyle => $index);
-	$self;
-    }
-
-### extension drawing ###
-# no-touch _edges directly
-
-    sub box {
-	my ($self, $x1, $y1, $x2, $y2) = @_;
-
-	$self->moveto($x1,$y1)
-	    ->lineto($x2,$y1)
-		->lineto($x2,$y2)
-		    ->lineto($x1,$y2)
-			->lineto($x1,$y1);
-    }
-
-    sub font {
-	my ($self, $font) = @_;
-
-	croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Character::Font') and $font->embed;
-	$self->{_current_font} = $font;
-	$self;
-    }
-
-    sub size {
-	my $self = shift;
-	$self->{_current_size} = shift;
-	$self;
-    }
-
-    sub text {
-	my ($self, $font, $text) = @_;
-
-	unless (defined $text) {
-	    $text = $font;
-	    $font = $self->{_current_font};
-	}
-	croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Character::Font') and eval{$font->embed};
-
-	my $hash = $font->{_glyph_hash};
-	my $cmap = $font->{_ttf_tables}{_cmap};
-	my $glyphs = $font->{_ttf_tables}{_glyphs};
-	my $advances = $font->{_ttf_tables}{_advance};
-	my $scale = $font->{_scale} * $self->{_current_size} * 20 / 1024;
-	my $tag = $font->{_tag};
-
-	for my $c (split //, $text) {
-	    my $cx = $self->{_current_X};
-	    my $cy = $self->{_current_Y};
-	    my $code = ord($c);
-	    my $gid = $cmap->{$code};
-	    my $adv = $advances->[$gid] * $scale;
-	    my $glyph = $glyphs->[$gid];
-	    if (defined $glyph) {
-		$glyph->read_dat;
-
-		my $i = 0;
-		for my $j (@{$glyph->{endPoints}}) {
-		    my @x = map {$_ * $scale + $cx} @{$glyph->{x}}[$i..$j];
-		    my @y = map {-$_ * $scale + $cy} @{$glyph->{y}}[$i..$j];
-		    my @f = @{$glyph->{flags}}[$i..$j];
-		    $i=$j+1;
-		    my $sx = shift @x;
-		    my $sy = shift @y;
-		    my $f  = shift @f;
-		    unless ($f & 1) {
-			push @x, $sx;
-			push @y, $sy;
-			push @f, $f;
-			if ($f[0] & 1) {
-			    $sx = shift @x;
-			    $sy = shift @y;
-			    $f  = shift @f;
-			} else {
-			    $sx = ($sx+$x[0])/2;
-			    $sy = ($sy+$y[0])/2;
-			    $f = 1;
-			}
-		    }
-		    push @x, $sx;
-		    push @y, $sy;
-		    push @f, $f;
-		    $self->_moveto_twips($sx, $sy);
-		    while(@x) {
-			my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
-		    
-			if ($f) {
-			    $self->_lineto_twips($x, $y);
-			} else {
-			    my ($ax, $ay);
-			    if ($f[0] & 1) {
-				$ax=shift @x;
-				$ay=shift @y;
-				shift @f;
-			    } else {
-				$ax=($x+$x[0])/2;
-				$ay=($y+$y[0])/2;
-			    }
-			    $self->_curveto_twips($x, $y, $ax, $ay);
-			}
-		    }
-		}
-	    }
-	    $self->_moveto_twips($cx + $adv, $cy);
-	}
-	$self;
-    }
-
-
-}
-
-
-#####
-
 
 {
     package SWF::Builder::Character::Shape::Def;
@@ -480,12 +127,20 @@ our $VERSION="0.04";
 
 	    $fillkey = join(',', %param);
 	    if (exists $param{Gradient}) {
+		unless (UNIVERSAL::isa($param{Matrix}, 'SWF::Builder::ExElement::MATRIX')) {
+		    $param{Matrix} = SWF::Builder::ExElement::MATRIX->new->init($param{Matrix});
+		}
 		push @param2, Gradient       => $self->_add_gradient($param{Gradient}),
 		              FillStyleType  =>
 				 (lc($param{Type}) eq 'radial' ? 0x12 : 0x10), 
 			      GradientMatrix => $param{Matrix};
  
 	    } elsif (exists $param{Bitmap}) {
+		unless (UNIVERSAL::isa($param{Matrix}, 'SWF::Builder::ExElement::MATRIX')) {
+		    my $m = $param{Bitmap}->matrix;
+		    $m->init($param{Matrix}) if defined $param{Matrix};
+		    $param{Matrix} = $m;
+		}
 		push @param2, BitmapID      => $param{Bitmap}->{ID},
 		              FillStyleType =>
 				  (lc($param{Type}) =~ /^clip(ped)?$/ ? 0x41 : 0x40),
@@ -601,10 +256,6 @@ our $VERSION="0.04";
 	$r;
     }
 
-    sub get_bbox {
-	return map{$_/20} @{shift->{_bounds}};
-    }
-
     sub _pack {
 	my ($self, $stream) = @_;
 
@@ -645,7 +296,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::Character::Shape - SWF shape object
+SWF::Builder::Character::Shape - SWF shape character.
 
 =head1 SYNOPSIS
 
@@ -660,13 +311,38 @@ SWF::Builder::Character::Shape - SWF shape object
 
 =head1 DESCRIPTION
 
-SWF shape is defined by a list of edges.
+SWF shape is defined by a list of edges. Set linestyle for the edges and
+fillstyle to fill the enclosed area, and draw edges with 'pen' 
+which has own drawing position. 
+Most drawing methods draw from the current pen position and move the pen 
+to the last drawing position.
+
+=head2 Coordinate System
+
+The positive X-axis points toward right, and the Y-axis points toward down. 
+All angles are measured clockwise.
+Placing, scaling, and rotating the display instance of the shape are based 
+on the origin of the shape coodinates.
+
+=head2 Creator and Display Method
 
 =over 4
 
 =item $shape = $mc->new_shape
 
-returns a new shape.
+returns a new shape character.
+
+=item $disp_i = $shape->place( ... )
+
+returns the display instance of the shape. See L<SWF::Builder>.
+
+=back
+
+=head2 Methods to Draw Edges
+
+All drawing methods return $shape itself. You can call these methods successively.
+
+=over 4
 
 =item $shape->linestyle( [ Width => $width, Color => $color ] )
 
@@ -703,11 +379,11 @@ See L<SWF::Builder::Gradient>.
 $bitmap is a bitmap character. Give $type 'clipped' to fill with 
 clipped bitmap, otherwise tiled.
 $matrix is a matrix to transform the bitmap. 
-See L<SWF::Builder::Bitmap>.
+See L<SWF::Builder::Character::Bitmap>.
 
 =item $shape->fillstyle0( ... )
 
-identical to $shape->fillstyle.
+synonym of $shape->fillstyle.
 
 =item $shape->fillstyle1( ... )
 
@@ -715,34 +391,91 @@ sets an additional fillstyle used in self-overlap shape.
 
 =item $shape->moveto( $x, $y )
 
-moves the draw point to ($x, $y).
+moves the pen to ($x, $y).
 
 =item $shape->r_moveto( $dx, $dy )
 
-moves the draw point to ( current X + $dx, current Y + $dy ).
+moves the pen relatively to ( current X + $dx, current Y + $dy ).
 
-=item $shape->lineto( $x, $y )
+=item $shape->lineto( $x, $y [, $x2, $y2, ...] )
 
-draws a line from the current draw point to ($x, $y)
+draws a connected line to ($x, $y), ($x2, $y2), ...
 
-=item $shape->r_lineto( $dx, $dy )
+=item $shape->r_lineto( $dx, $dy [, $dx2, $dy2, ...] )
 
-draws a line from the current draw point to ( current X + $dx, current Y + $dy ).
+draws a connected line relatively to ( current X + $dx, current Y + $dy ), 
+( former X + $dx2, former Y + $dy2 ), ...
 
-=item $shape->curveto( $cx, $cy, $ax, $ay )
+=item $shape->curveto( $cx, $cy, $ax, $ay [,$cx2, $cy2, $ax2, $ay2, ...] )
 
-draws a quadratic bezier curve from the current draw point to ($ax, $ay)
+draws a quadratic Bezier curve to ($ax, $ay)
 using ($cx, $cy) as the control point.
 
-=item $shape->r_curveto( $cdx, $cdy, $adx, $ady )
+=item $shape->r_curveto( $cdx, $cdy, $adx, $ady [,$cdx2, $cdy2, $adx2, $ady2, ...] )
 
-draws a quadratic bezier curve from the current draw point to 
+draws a quadratic Bezier curve to 
 (current X + $cdx+$adx, current Y + $cdy+$ady)
 using (current X + $cdx, current Y + $cdy) as the control point.
 
-=item $shape->box( $x1, $y1, $x2, $y2 )
+=item $shape->curve3to( $cx1, $cy1, $cx2, $cy2, $ax, $ay [, ...] )
 
-draws a box. The draw point is moved to ($x1, $y1) after drawing.
+draws a cubic Bezier curve to ($ax, $ay) using ($cx1, $cy1) and
+($cx2, $cy2) as control points.
+
+=item $shape->r_curve3to( $cdx1, $cdy1, $cdx2, $cdy2, $adx, $ady [, ...] )
+
+draws a cubic Bezier curve to (current X + $cx1 + $cx2 + $ax, current Y + $cy1 + $cy2 + $ay)
+using (current X + $cx1, current Y + $cy1) and (current X + $cx1 + $cx2, current Y + $cy1 + $cy2) as control points.
+
+=item $shape->arcto( $startangle, $centralangle, $rx [, $ry [, $rot]] )
+
+draws an elliptic arc from the current pen position.
+$startangle is the starting angle of the arc in degrees.
+$centralangle is the central angle of the arc in degrees.
+$rx and $ry are radii of the full ellipse. If $ry is not specified, 
+a circular arc is drawn.
+Optional $rot is the rotation angle of the full ellipse. 
+
+=item $shape->radial_moveto( $r, $theta )
+
+moves the pen from the current position to distance $r and angle $theta in degrees
+measured clockwise from X-axis.
+
+=item $shape->r_radial_moveto( $r, $dtheta )
+
+moves the pen from the current position to distance $r and angle $dtheta in degrees
+measured clockwise from the current direction.
+The current direction is calculated from the start point of 
+the last line segment or the control point of the last curve segment, 
+and is reset to 0 when the pen was moved without drawing.
+
+=item $shape->radial_lineto( $r, $theta [, $r2, $theta2,... ] )
+
+draws a line from the current position to distance $r and angle $theta
+measured clockwise from X-axis in degrees.
+
+=item $shape->r_radial_lineto( $r, $dtheta [, $r2, $dtheta2,... ] )
+
+draws a line from the current position to distance $r and angle $dtheta
+measured clockwise from the current direction in degrees.
+The current direction is calculated from the start point of 
+the last line segment or the control point of the last curve segment, 
+and is reset to 0 when the pen was moved without drawing.
+
+=item $shape->close_path()
+
+closes the path drawn by '...to' commands. 
+This draws a line to the position set by the last '*moveto' command.
+After drawing shapes or text by the methods described the next section, 
+'close_path' may not work properly because those methods may use 'moveto' internally.
+
+=back
+
+=head2 Methods to Draw Shapes and Texts
+
+
+
+=over 4
 
 =item $shape->font( $font )
 
@@ -755,16 +488,107 @@ sets a font size to $size in pixel.
 
 =item $text->text( $string )
 
-draws the $string.
+draws the $string with the current Y coordinate as the baseline
+and moves the pen to the position which the next letter will be written.
+
+=item $shape->box( $x1, $y1, $x2, $y2 )
+
+draws a rectangle from ($x1, $y1) to ($x2, $y2) and moves the pen to ($x1, $y1).
+
+=item $shape->rect( $w, $h, [, $rx [, $ry]] )
+
+draws a rectangle with width $w and height $h from the current position.
+If optional $rx is set, draws a rounded rectangle. $rx is a corner radius.
+You can also set $ry, elliptic Y radius ($rx for X radius).
+The pen does not move after drawing.
+
+=item $shape->circle( $r )
+
+draws a circle with radius $r.
+The current pen position is used as the center.
+The pen does not move after drawing.
+
+=item $shape->ellipse( $rx, $ry [, $rot] )
+
+draws an ellipse with radii $rx and $ry.
+The current pen position is used as the center.
+Optional $rot is a rotation angle.
+The pen does not move after drawing.
+
+=item $shape->starshape( $size [, $points [, $thickness [, $screw]]] )
+
+draws a $points pointed star shape with size $size.
+The current pen position is used as the center.
+If $points is not specified, 5-pointed star (pentagram) is drawn.
+
+Optional $thickness can take a number 0(thin) to 2(thick).
+0 makes to draw lines like spokes and 2 makes to draw a convex polygon.
+Default is 1.
+
+Optional $screw is an angle to screw the concave corners of 
+the star in degrees.
+
+The pen does not move after drawing.
+
+=item $shape->path( $pathdata )
+
+draws a path defined by $pathdata.
+$pathdata is a string compatible with 'd' attribute in 'path' element of SVG. 
+See SVG specification for details.
+
+=back
+
+=head2 Methods for Pen Position and Coordinates
+
+=over 4
 
 =item $shape->get_bbox
 
 returns the bounding box of the shape, a list of coordinates
 ( top-left X, top-left Y, bottom-right X, bottom-right Y ).
 
-=item $disp_i = $shape->place( ... )
+=item $shape->get_pos
 
-returns the display instance of the shape. See L<SWF::Builder>.
+returns the current pen position ($x, $y).
+
+=item $shape->push_pos
+
+pushes the current pen position onto the internal stack.
+
+=item $shape->pop_pos
+
+pops the pen position from the internal stack and move there.
+
+=item $shape->lineto_pop_pos
+
+pops the pen position from the internal stack and draw line to there.
+
+=item $shape->transform( \@matrix_options [, \&sub] )
+
+transforms the coordinates for subsequent drawings by the matrix.
+Matrix options are pairs of a keyword and a scalar parameter or 
+array reference of coordinates list, as follows:
+
+  scale  => $scale or [$scalex, $scaley]  # scales up/down by $scale.
+  rotate => $angle                        # rotate $angle degree clockwise.
+  translate => [$x, $y]                   # translate coordinates to ($x, $y)
+  moveto => [$x, $y]                      # same as 'translate'
+
+  and all SWF::Element::MATRIX fields 
+  ( ScaleX / ScaleY / RotateSkew0 / RotateSkew1 / TranslateX / TranslateY ).
+
+ATTENTION: 'translate/moveto' takes coordinates in pixel, while 'TranslateX' and 'TranslateY' in TWIPS (20 TWIPS = 1 pixel).
+
+If &sub is specified, this method calls &sub with a shape object 
+with transformed coordinates, and return the original, untransformed shape object.
+Otherwise, it returns a transformed shape object. 
+You may need to call 'end_transform' to stop transformation.
+
+This method does not affect either paths drawn before or the current pen position.
+
+=item $tx_shape->end_transform
+
+stops transformation of the coordinates and returns the original shape object.
 
 =back
 

@@ -1,9 +1,10 @@
 package SWF::Builder::Gradient;
 
 use Carp;
+use SWF::Builder::ExElement;
 
 @SWF::Builder::Gradient::ISA = ('SWF::Element::Array::GRADIENT3', 'SWF::Builder::ExElement::Color::AddColor');
-our $VERSION = "0.01";
+our $VERSION = "0.02";
 
 sub new {
     my ($class, $is_alpha) = @_;
@@ -39,7 +40,7 @@ sub matrix {
 
 package SWF::Builder::Gradient::MATRIX;
 
-@SWF::Builder::Gradient::MATRIX::ISA = ('SWF::Element::MATRIX');
+@SWF::Builder::Gradient::MATRIX::ISA = ('SWF::Builder::ExElement::MATRIX');
 
 use Carp;
 
@@ -91,7 +92,7 @@ sub fit_to_rect {
 	    last;
 	};
     }
-    $self->moveto(($x1+$x2)*10, ($y1+$y2)*10);  # /2*20
+    $self->moveto(($x1+$x2)/2, ($y1+$y2)/2);  # /2*20
     $self;
 }
 

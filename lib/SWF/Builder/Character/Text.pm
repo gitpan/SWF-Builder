@@ -3,7 +3,7 @@ package SWF::Builder::Character::Text;
 use strict;
 use utf8;
 
-our $VERSION="0.031";
+our $VERSION="0.032";
 
 @SWF::Builder::Character::Text::ISA = qw/ SWF::Builder::Character::UsableAsMask /;
 @SWF::Builder::Character::Text::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Text /;
@@ -198,7 +198,7 @@ sub text {
 		my $kern = ($self->{_kerning} and defined $c) ? $font->kern($ord_c1, ord($c)) : 0;
 #		my $kern = 0;
 		my $adv = ($glyph_hash->{$c1}[0] + $kern) * $scale;
-		my $b = $glyph_hash->{$c1}[2];
+		my $b = $glyph_hash->{$c1}[1]{_bounds};
 		if (defined $b->[0]) {
 		    $bbox->set_boundary($x*20+$b->[0]*$scale, $b->[1]*$scale, $x*20+$b->[2]*$scale, $b->[3]*$scale);
 		} else {
