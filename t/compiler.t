@@ -12,18 +12,15 @@ ok(1);
 my $BE = (CORE::pack('s',1) eq CORE::pack('n',1));
 my $INF  = "\x00\x00\x00\x00\x00\x00\xf0\x7f";
 my $NINF = "\x00\x00\x00\x00\x00\x00\xf0\xff";
-my $NAN  = "\x00\x00\x00\x00\x00\x00\xf8\x7f";
-my $IND  = "\x00\x00\x00\x00\x00\x00\xf8\xff";
 if ($BE) {
     $INF  = reverse $INF;
     $NINF = reverse $NINF;
-    $NAN  = reverse $NAN;
-    $IND  = reverse $IND;
 }
+my $MANTISSA  = ~$NINF;
 my $INFINITY = unpack('d', $INF);
 ok($INFINITY+1, $INFINITY);
 ok(pack('d', -$INFINITY), $NINF);
-ok(pack('d', $INFINITY-$INFINITY) eq $IND or pack('d', $INFINITY-$INFINITY) eq $NAN);
+ok((pack('d', $INFINITY-$INFINITY) & $INF) eq $INF and (pack('d', $INFINITY-$INFINITY) & $MANTISSA) ne "\x00" x 8);
 
 my $c;
 my $actions;

@@ -11,115 +11,125 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_04';
+our $VERSION = '0.00_05';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
-
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
 my $BE = (CORE::pack('s',1) eq CORE::pack('n',1));
 my $INF  = "\x00\x00\x00\x00\x00\x00\xf0\x7f";
 my $NINF = "\x00\x00\x00\x00\x00\x00\xf0\xff";
-my $NAN  = "\x00\x00\x00\x00\x00\x00\xf8\x7f";
-my $IND  = "\x00\x00\x00\x00\x00\x00\xf8\xff";
 if ($BE) {
     $INF  = reverse $INF;
     $NINF = reverse $NINF;
-    $NAN  = reverse $NAN;
-    $IND  = reverse $IND;
 }
+my $MANTISSA  = ~$NINF;
 my $INFINITY = unpack('d', $INF);
 
-sub _tokenize {
-    my $self = shift;
-    my $text_r = \${$self}{text};
+our %O;
 
-    return ('','') if $$text_r eq '';
+BEGIN {
+    %O = 
+	( O_ALL        => ~0,
+	  O_PEEPHOLE   => 1<<0, # peephole optimization
+	  O_CONSTEXP   => 1<<1, # calculate constant expressions
+	  O_CONSTMATH  => 1<<2, # calculate math funcs with constant args and constant properties
+	  O_LEFTONCE   => 1<<3, # evaluate the lefthand side of assignment expression only once
+	  O_REGISTER   => 1<<4, # assign local variables to registers.
+	  O_LOCALREG   => 1<<5, # assign local variables to local registers using ActionDefineFunction2. Need O_REGISTER. Flash player 6.0.65 and above only.
+	  O_6R65       => 1<<5,
 
-    for ($$text_r) {
-	s/\A(?:[\x09\x0b\x0c\x20\xa0\p{IsZs}]|\/\/.+?(?=[$nl])|\/\*[^$nl]*?\*\/)+//o
-	    and redo;
-	s/\A((?:\/\*.*?[$nl].*?\*\/|[$nl])(?:\/\*.*?\*\/|\/\/.*?[$nl]|\s)*)//os
-	    and do {
-		my $ln = scalar($1=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
-		return ("\n" x $ln, 'LineTerminator');
-	    };
-	s/\A\#([^$nl]+)[$nl]//s
-	    and do {
-		$self->{line}++;
-		return ($1, 'Pragma');
-	    };
-	s/\A\"((\\.|[^"])*)\"//s
-	    and do {
-		my $s = $1;
-		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
-                $s=~s/(\\*)\'/$1.(length($1)%2==1?"'":"\\'")/ge;
-		return ($s, 'StringLiteral');
-	    };
-	s/\A\'((\\.|[^'])*)\'//s
-	    and do {
-		my $s = $1;
-		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
-		return ($s, 'StringLiteral');
-	    };
-        ( s/\A(0[0-7]+)//i       or
-	  s/\A(0x[0-9a-f]+)//i   or
-	  s/\A(0b[01]+)//i  )    and return (oct($1), 'NumberLiteral');
-        s/\A((?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?)//
-         	                 and return ($1, 'NumberLiteral');
-	s/\A\&&//                and return ('&&', 'AndOp');
-	s/\A\|\|//               and return ('||', 'OrOp');
-	s/\A\+\+//               and return ('++', 'PrefixOp');
-	s/\A\-\-//               and return ('--', 'PrefixOp');
-	s/\A\*=//                and return ('*=', 'AssignmentOp');
-	s/\A\/=//                and return ('/=', 'AssignmentOp');
-	s/\A\%=//                and return ('%=', 'AssignmentOp');
-	s/\A\+=//                and return ('+=', 'AssignmentOp');
-	s/\A\-=//                and return ('-=', 'AssignmentOp');
-	s/\A\<<=//               and return ('<<=', 'AssignmentOp');
-	s/\A\>>>=//              and return ('>>>=', 'AssignmentOp');
-	s/\A\>>=//               and return ('>>=', 'AssignmentOp');
-	s/\A\&=//                and return ('&=', 'AssignmentOp');
-	s/\A\^=//                and return ('^=', 'AssignmentOp');
-	s/\A\|=//                and return ('|=', 'AssignmentOp');
-	s/\A\<<//                and return ('<<', 'ShiftOp');
-	s/\A\>>>//               and return ('>>>', 'ShiftOp');
-	s/\A\>>//                and return ('>>', 'ShiftOp');
-	s/\A\<=//                and return ('<=', 'RelOp');
-	s/\A\>=//                and return ('>=', 'RelOp');
-	s/\A\===//               and return ('===', 'EqOp');
-	s/\A\!==//               and return ('!==', 'EqOp');
-	s/\A\==//                and return ('==', 'EqOp');
-	s/\A\!=//                and return ('!=', 'EqOp');
-	s/\A\&//                 and return ('&', 'BitAndOp');
-	s/\A\^//                 and return ('^', 'BitXorOp');
-	s/\A\|//                 and return ('|', 'BitOrOp');
-	s/\A\~//                 and return ('~', 'UnaryOp');
-	s/\A\!//                 and return ('!', 'UnaryOp');
-	s/\A\?//                 and return ('?', 'ConditionalOp');
-	s/\A\=//                 and return ('=', 'AssignmentOp');
-	s/\A\*//                 and return ('*', 'MultOp');
-	s/\A\///                 and return ('/', 'MultOp');
-	s/\A\%//                 and return ('%', 'MultOp');
-	s/\A\+//                 and return ('+', 'AddOp');
-	s/\A\-//                 and return ('-', 'AddOp');
-	s/\A\<//                 and return ('<', 'RelOp');
-	s/\A\>//                 and return ('>', 'RelOp');
-	s/\A\{//                 and return ('{', '{');
-	s/\A\}//                 and return ('}', '}');
-	s/\A\(//                 and return ('(', '(');
-	s/\A\)//                 and return (')', ')');
- 	s/\A\[//                 and return ('[', '[');
-	s/\A\]//                 and return (']', ']');
-	s/\A\.//                 and return ('.', '.');
-	s/\A\,//                 and return (',', ',');
-	s/\A\;//                 and return (';', 'StatementTerminator');
-	s/\A\://                 and return (':', ':');
-
-	s/\A([_\$\p{IsLl}\p{IsLu}\p{IsLt}\p{IsLm}\p{IsLo}\p{IsNl}][\$\w]*)//
-	                         and return _check_reserved($1);
-
-    }
+	  );
 }
+
+use constant \%O;
+		
+sub new {
+    my $class = shift;
+    my $text = shift;
+    my %option = @_;
+
+    my $new = bless {
+	text => $text,
+	line => 1,
+	ungets => [],
+	scope => [],
+	regvars => [],
+	stat => {
+	    code => [],
+	    label => 'A',
+	    loop => [],
+	    with => 0,
+	    Trace => 'eval',
+	    Warning => 1,
+	    Optimize => O_ALL & ~O_REGISTER & ~O_LOCALREG,
+	    Version => 6,
+	},
+    }, $class;
+    my $stat = $new->{stat};
+
+    for my $o (qw/Warning Version Trace/) {
+	$stat->{$o} = $option{$o} if defined $option{$o};
+    }
+    if (defined(my $opt = $option{Optimize})) {
+	if ($opt =~ /^\d+$/) {
+	    $stat->{Optimize} = $opt;
+	} else {
+	    my $o = $stat->{Optimize};
+	    my @o = split /[\s|]+/, $opt;
+
+	    for (@o) {
+		if (/^-/) {
+		    s/^-//;
+		    carp "Unknown optimize option '$_'" unless exists $O{$_};
+		    $o &= ~$O{$_};
+		} else {
+		    carp "Unknown optimize option '$_'" unless exists $O{$_};
+		    $o |= $O{$_};
+		}
+	    }
+	    $stat->{Optimize} = $o;
+	}
+    }
+    if ($stat->{Optimize} & O_LOCALREG) {
+	$stat->{Optimize} |= O_REGISTER;
+	if ($new->{stat}{Version} < 6) {
+	    $new->_error('O_LOCALREG can use SWF version 6 or later.');
+	}
+    }
+
+    return $new;
+}
+
+sub compile {
+    my ($self, $actions) = @_;
+    my $tree = $self->source_elements;
+    my $option = $actions||'';
+
+    $tree->_tree_dump, return if $option eq 'tree';
+    $tree->compile;
+    $self->_tidy_up;
+    $self->_code_print, return if $option eq 'text';
+    $actions = SWF::Element::Array::ACTIONRECORDARRAY->new unless ref($actions);
+    $self->_encode($actions);
+    $actions->dumper, return if $option eq 'dump';
+    $actions;
+}
+
+sub assemble {
+    my ($self, $actions) = @_;
+    my $option = $actions||'';
+
+    push @{$self->{stat}{code}}, grep /[^#]/, split /$nl/, $self->{text};
+    $self->_tidy_up;
+    $self->_code_print, return if $option eq 'text';
+    $actions = SWF::Element::Array::ACTIONRECORDARRAY->new unless ref($actions);
+    $self->_encode($actions);
+    $actions->dumper, return if $option eq 'dump';
+    $actions;
+}
+
+### parser
+
 
 my %reserved = (
 		null       => [undef, 'NULLLiteral'],
@@ -208,9 +218,108 @@ my %property;
 	       _xmouse       _ymouse / 
 	  } = (0..21);
 
-sub _check_reserved {
-    my $key = shift;
-    return ref($reserved{$key})? @{$reserved{$key}} : ($key, $reserved{$key}||(exists $property{lc $key} ? 'Property' : 'Identifier'));
+my %ops = ('=' => 'AssignmentOp', 
+	   '+' => 'AddOp',
+	   '-' => 'AddOp',
+	   '<' => 'RelOp',
+	   '>' => 'RelOp',
+	   '*' => 'MultOp',
+	   '/' => 'MultOp',
+	   '%' => 'MultOp',
+	   '&' => 'BitAndOp',
+	   '^' => 'BitXorOp',
+	   '|' => 'BitOrOp',
+	   '~' => 'UnaryOp',
+	   '!' => 'UnaryOp',
+	   '?' => 'ConditionalOp',
+	   ':' => ':',
+	   );
+
+=begin comment
+
+$self->_get_token(@token);
+
+get the next token. return ($token_text, $token_type, $line_terminator_count).
+$num_line_terminator is a number of skipped line terminator or newline.
+it is used for automatic semicolon insertion.
+
+=cut
+
+sub _get_token {
+    my $self = shift;
+    my $ln = 0;
+    my @token;
+
+    if (@{$self->{ungets}}) {
+	@token = @{pop @{$self->{ungets}}};
+	$self->{line}+=$token[2];
+	return @token;
+    }
+
+    for ($self->{text}) {
+	s/\A(?:[\x09\x0b\x0c\x20\xa0\p{IsZs}]|\/\/.+?(?=[$nl])|\/\*[^$nl]*?\*\/)+//o
+	    and redo;
+	s/\A((?:\/\*.*?[$nl].*?\*\/|[$nl])(?:\/\*.*?\*\/|\/\/.*?[$nl]|\s)*)//os
+	    and do {
+		my $ln1 = scalar($1=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
+		$self->{line} += $ln1;
+		$ln += $ln1;
+		redo;
+	    };
+	s/\A([_\$\p{IsLl}\p{IsLu}\p{IsLt}\p{IsLm}\p{IsLo}\p{IsNl}][\$\w]*)//
+	    and do {
+		my $key = $1;
+		return ((ref($reserved{$key})? @{$reserved{$key}} : ($key, $reserved{$key}||(exists $property{lc($key)} ? 'Property' : 'Identifier'))), $ln);
+	    };
+	s/\A\"((\\.|[^"])*)\"//s
+	    and do {
+		my $s = $1;
+		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
+                $s=~s/(\\*)\'/$1.(length($1)%2==1?"'":"\\'")/ge;
+		return ($s, 'StringLiteral', $ln);
+	    };
+	s/\A\'((\\.|[^'])*)\'//s
+	    and do {
+		my $s = $1;
+		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
+		return ($s, 'StringLiteral', $ln);
+	    };
+
+        m/\A0/                   and
+        ( s/\A(0[0-7]+)//i       or
+	  s/\A(0x[0-9a-f]+)//i   or
+	  s/\A(0b[01]+)//i  )    and return (oct($1), 'NumberLiteral', $ln);
+        s/\A((?=\d|\.\d)\d*(\.\d*)?([Ee]([+-]?\d+))?)//
+         	                 and return ($1, 'NumberLiteral', $ln);
+
+	s/\A\;//                 and return (';', 'StatementTerminator', $ln);
+	s/\A([.,(){}\[\]])//     and return ($1, $1, $ln);
+	s/\A\&&//                and return ('&&', 'AndOp', $ln);
+	s/\A\|\|//               and return ('||', 'OrOp', $ln);
+	s/\A\+\+//               and return ('++', 'PrefixOp', $ln);
+	s/\A\-\-//               and return ('--', 'PrefixOp', $ln);
+	s/\A([*\/%+\-&^|]=)//     and return ($1, 'AssignmentOp', $ln);
+	s/\A\<<=//               and return ('<<=', 'AssignmentOp', $ln);
+	s/\A\>>>=//              and return ('>>>=', 'AssignmentOp', $ln);
+	s/\A\>>=//               and return ('>>=', 'AssignmentOp', $ln);
+	s/\A\<<//                and return ('<<', 'ShiftOp', $ln);
+	s/\A\>>>//               and return ('>>>', 'ShiftOp', $ln);
+	s/\A\>>//                and return ('>>', 'ShiftOp', $ln);
+	s/\A\<=//                and return ('<=', 'RelOp', $ln);
+	s/\A\>=//                and return ('>=', 'RelOp', $ln);
+	s/\A([!=]==?)//          and return ($1, 'EqOp', $ln);
+	s/\A([=+\-<>*\/%&^|~!?:])//
+                                 and return ($1, $ops{$1}, $ln);
+
+	s/\A\#([^$nl]+)[$nl]//os
+	    and do {
+		$self->{line}++;
+		return ($1, 'Pragma', $ln);
+	    };
+    }
+
+    return ('', '', $ln);
+
 }
 
 sub identifier {
@@ -226,35 +335,6 @@ sub identifier {
 	$self->_warn(2, '"%s" should not use as an identifier because it is reserved future', $token[0]);
     }
     return $token[0];
-}
-
-
-=begin comment
-
-$self->_get_token(@token);
-
-get the next token. return ($token_text, $token_type, $line_terminator_count).
-$num_line_terminator is a number of skipped line terminator or newline.
-it is used for automatic semicolon insertion.
-
-=cut
-
-sub _get_token {
-    my $self = shift;
-    my $ln = 0;
-
-    if (@{$self->{ungets}}) {
-	my @token = @{pop @{$self->{ungets}}};
-	$self->{line}+=$token[2];
-	return @token;
-    }
-    my @token = $self->_tokenize;
-    while($token[1] eq 'LineTerminator') {
-	$ln+=length($token[0]);
-	$self->{line}+=$ln;
-	@token = $self->_tokenize;
-    }
-    return (@token, $ln);
 }
 
 =begin comment
@@ -294,7 +374,7 @@ sub _check_token {
 	}
 	$self->_unget_token(@token);
     }
-    return('', '');
+    return;
 }
 
 sub _check_token_fatal {
@@ -311,11 +391,14 @@ keep the compiler context to $keep.
 
 =cut
 
+use Storable 'dclone';
+
 sub _keep_context {
     my $self = shift;
     return {
 	text => $self->{text},
 	line => $self->{line},
+	scope => $self->{scope}[-1] ? dclone($self->{scope}) : [],
 	ungets => [@{$self->{ungets}}],
 	};
 }
@@ -332,14 +415,139 @@ sub _restore_context {
     my ($self, $keep) = @_;
     $self->{text} = $keep->{text};
     $self->{line} = $keep->{line};
+    $self->{scope} = $keep->{scope};
     $self->{ungets} = $keep->{ungets};
 }
 
 sub new_node {
     my ($self, $node) = @_;
 
-    bless { line => $self->{line}, stat => $self->{stat}, node => [] }, "SWF::Builder::ActionScript::SyntaxNode::$node";
-#    bless { line => $self->{file}{line}, file => $self->{file}{name}, stat => $self->{stat}, node => [] }, "SWF::Builder::ActionScript::SyntaxNode::$node";
+    bless { line => $self->{line}, stat => $self->{stat}, node => [], regvars => $self->{regvars}[-1]}, "SWF::Builder::ActionScript::SyntaxNode::$node";
+}
+
+sub new_scope {
+    my $self = shift;
+    return unless $self->{stat}{Optimize} & O_REGISTER;
+
+    my $scope = {
+	vars => {
+	    this      => { count => 0, start => 0, end => 0, preload => 1 },
+	    arguments => { count => 0, start => 0, end => 0, preload => 1 },
+	    super     => { count => 0, start => 0, end => 0, preload => 1 },
+	    _root     => { count => 0, start => 0, end => 0, preload => 1 },
+	    _parent   => { count => 0, start => 0, end => 0, preload => 1 },
+	    _global   => { count => 0, start => 0, end => 0, preload => 1 },
+	},
+	count   => 0,   # node count
+	preload => [],  # variables to need to preload
+    };
+    push @{$self->{scope}}, $scope;
+    push @{$self->{regvars}}, {};
+}
+
+sub exit_scope {  # assign local variables to registers.
+    my $self = shift;
+    return unless $self->{stat}{Optimize} & O_REGISTER;
+    my $scope = pop @{$self->{scope}};
+    my $regvars = pop @{$self->{regvars}};
+    my $reg_count = ($self->{stat}{Optimize} & O_LOCALREG) ? 255 : 3;
+    my $node_count = $scope->{count};
+    my $vars = $scope->{vars};
+
+    my @vars;
+    my $null = pack("b$node_count", '0' x $node_count);
+    my @regmap = ($null) x $reg_count;
+    my $regno = 0;
+
+    if ($self->{stat}{Optimize} & O_LOCALREG) {
+	for my $prevar (qw/ this arguments super _root _parent _global /) {
+	    next if $vars->{$prevar}{count} <= 0;
+	    my $v_start = $vars->{$prevar}{start};
+	    my $v_end = $vars->{$prevar}{end};
+	    $regmap[$regno] |= pack("b$node_count", '0' x $v_start . '1' x ($v_end - $v_start + 1));
+	    $regvars->{$prevar} = ++$regno;
+	}
+	@vars = sort{$vars->{$b}{count}<=>$vars->{$a}{count}} grep {$vars->{$_}{count} > 0 and !exists($regvars->{$_})} keys %$vars;
+    } else {
+	@vars = sort{$vars->{$b}{count}<=>$vars->{$a}{count}} grep {$vars->{$_}{count} > $vars->{$_}{preload}} keys %$vars;
+    }
+
+    for my $v (@vars) {
+	my $v_start = $vars->{$v}{start};
+	my $v_end = $vars->{$v}{end};
+	my $v_bits = pack("b$node_count", '0' x $v_start . '1' x ($v_end - $v_start + 1));
+	for (my $i = 0; $i < $reg_count; $i++) {
+	    next if (($regmap[$i] & $v_bits) ne $null) ;
+	    $regmap[$i] |= $v_bits;
+	    $regvars->{$v} = $i+1;
+	    last;
+	}
+    }
+
+    my $i = 0;
+    while ( $i < $reg_count ) {
+	last if ($regmap[$i++] eq $null) ;
+    }
+    $regvars->{' regcount'} = $i;
+}
+
+sub countup_node {
+    my $self = shift;
+    return unless $self->{stat}{Optimize} & O_REGISTER;
+    $self->{scope}[-1]{count}++;
+}
+
+sub add_var {
+    my ($self, $var, $initcount, $preload) = @_;
+    return unless $self->{stat}{Optimize} & O_REGISTER;
+    my $scope = $self->{scope}[-1];
+    return unless defined $scope;  # top level (not in function).
+    my $vars = $scope->{vars};
+    $self->_error("Variable '%s' is already declared", $var) if exists $vars->{$var};
+    $vars->{$var} = {count => $initcount, start => $scope->{count}, end => $scope->{count}, preload => $preload};
+}
+
+sub use_var { 
+    my ($self, $var) = @_;
+    return unless $self->{stat}{Optimize} & O_REGISTER;
+    my $scope = $self->{scope}[-1];
+    return unless defined $scope;  # top level (not in function).
+
+    my  $vars = $scope->{vars};
+    if (exists $vars->{$var}) { # if $var is declared in the current scope...
+
+# negative count means the var should not be assigned to register
+# (using in the inner scope).
+
+	return if ($vars->{$var}{count} < 0);	
+
+# count up $var.
+# $_x are treated as register variables. weighted.
+
+	$vars->{$var}{end} = $scope->{count};
+	if ($vars->{$var}{count} == 0 and !(($self->{stat}{Optimize} & O_LOCALREG) and $vars->{$var}{preload}) ) {
+	    $vars->{$var}{start} = $scope->{count};
+	    push @{$scope->{preload}}, $var;
+	}
+	if ($var =~ /^\$_/) {
+	    $vars->{$var}{count} += 100;
+	} else {
+	    $vars->{$var}{count}++;
+	}
+    } else { # search outer scope.
+	my $i = -1;
+	while (defined($scope = $self->{scope}[--$i])) {
+	    my $vars = $scope->{vars};
+	    if (exists $vars->{$var} and $vars->{$var}{count} >= 0) {
+
+# If the var is declared in the outer scope,
+# it should not be assigned to register. negate.
+
+		$vars->{$var}{count} = -$vars->{$var}{count}-1;
+		last;
+	    }
+	}
+    }
 }
 
 sub source_elements {
@@ -348,7 +556,7 @@ sub source_elements {
     my $node = $self->new_node('SourceElements');
 
     while($c = ($self->function_declaration || $self->statement)) {
-	if (ref($c)=~/:FunctionDeclaration$/) {
+	if (ref($c)=~/:Function$/) {
 	    $node->unshift_node($c);
 	} else {
 	    $node->add_node($c);
@@ -360,42 +568,15 @@ sub source_elements {
 
 sub function_declaration {
     my $self = shift;
-    my $keep = $self->_keep_context;
-    my $node = $self->new_node('FunctionDeclaration');
 
-    {
-	$self->_check_token('Function') or return;
-# if a function name is missing, it is function_expression. need re-parse.
-	my $name = $self->identifier or last;
-	$self->_check_token_fatal('(', "'(' is needed after 'function'");
-	my $params = $self->new_node('FunctionParameter');
-	my @token;
-	unless ($self->_check_token(')')) {
-	    do {
-		my $i = $self->identifier or $self->_error('Identifier is needed in the argument list');
-		$params->add_node($i);
-		@token = $self->_get_token;
-	    } while ($token[1] eq ',');
-	    $self->_error("Missing ')'") unless $token[1] eq ')';
-	}
-	$self->_check_token_fatal('{', "Missing '{' for function '$name'");
+    $self->_check_token('Function') or return;
 
-	my $statements = $self->new_node('SourceElements');
-	until($self->_check_token('}')) {
-	    my $c = ($self->function_declaration || $self->statement)
-		or $self->_error("Syntax error. Missing '}' for function.");
-	    if (ref($c)=~/:FunctionDeclaration$/) {
-		$statements->unshift_node($c);
-	    } else {
-		$statements->add_node($c);
-	    }
-	}
-	$node->add_node($name, $params, $statements);
-	return $node;
-    }
-    $self->_restore_context($keep);
-    return;
+    my $name = $self->identifier;
+    $self->_error('Function name is necessary to declare function') unless $name;
+
+    $self->function_expression($name);
 }
+
 
 sub statement {
     my $self = shift;
@@ -427,14 +608,13 @@ sub statement {
 
 # simple actions.
 		/^continue$/ and do {
-		    my $n = $self->new_node('ContinueStatement');
 		    $self->_statement_terminator;
-		    return $n;
+		    return $self->new_node('ContinueStatement');
+
 		};
 		/^break$/ and do {
-		    my $n = $self->new_node('BreakStatement');
 		    $self->_statement_terminator;
-		    return $n;
+		    return $self->new_node('BreakStatement');
 		};
 		/^return$/ and do {
 		    my $n = $self->new_node('ReturnStatement');
@@ -448,7 +628,7 @@ sub statement {
 		    return $n;
 		};
 
-		$self->_error('Syntax error2');
+		$self->_error('Syntax error');
 	    }
 	};
 	/^Pragma$/ and do {
@@ -471,14 +651,16 @@ sub variable_declaration_list {
 
 sub variable_declaration {
     my $self = shift;
-    my $n = $self->new_node('VariableDeclaration');
     my $i = $self->identifier or $self->_error("Error token '%s', identifier expected.", ($self->_get_token)[0]);
+    my $n = $self->new_node('VariableDeclaration');
     if (my @op = $self->_check_token('AssignmentOp')) {
 	$self->_error("Syntax error") if $op[0] ne '=';
+	$self->add_var($i, 1);
 	my $e = $self->assignment_expression or $self->_error("Syntax error");
 	$n->add_node($i, $e);
 	return bless $n, 'SWF::Builder::ActionScript::SyntaxNode::VariableDeclarationWithParam';
     } else {
+	$self->add_var($i, 0);
 	$n->add_node($i);
 	return $n;
     }
@@ -486,11 +668,11 @@ sub variable_declaration {
 
 sub telltarget_statement {
     my $self = shift;
-    my $n = $self->new_node('TellTargetStatement');
 
     $self->_warn_not_recommend("'tellTarget' action", "'with'");
     $self->_check_token_fatal('(');
     my $e = $self->expression or $self->_error("Target movieclip is needed in 'tellTarget'.");
+    my $n = $self->new_node('TellTargetStatement');
     $n->add_node($e);
     $self->_check_token_fatal(')');
     $n->add_node($self->statement);
@@ -499,11 +681,11 @@ sub telltarget_statement {
 
 sub ifframeloaded_statement {
     my $self = shift;
-    my $n = $self->new_node('IfFrameLoadedStatement');
 
     $self->_warn_not_recommend("'ifFrameLoaded' action", " property");
     $self->_check_token_fatal('('); 
     my $e = $self->expression or $self->_error("Frame number is needed in 'ifFrameLoaded'.");
+    my $n = $self->new_node('IfFrameLoadedStatement');
     $n->add_node($e);
     $self->_check_token_fatal(')');
     $n->add_node($self->statement);
@@ -512,20 +694,20 @@ sub ifframeloaded_statement {
 
 sub switch_statement {
     my $self = shift;
-    my $n = $self->new_node('SwitchStatement');
     my $default;
     $self->_check_token_fatal('(');
     my $e = $self->expression or $self->_error("Object expression is needed in 'switch'.");
-    $n->add_node($e);
     $self->_check_token_fatal(')');
     $self->_check_token_fatal('{');
+    my $n = $self->new_node('SwitchStatement');
+    $n->add_node($e);
 
     while (my @token = $self->_check_token('Label')) {
 	if ($token[0] eq 'case') {
-	    my $case = $self->new_node('CaseClause');
 	    my $e = $self->expression or $self->_error('Missing case expression.');
-	    $case->add_node($e);
 	    $self->_check_token_fatal(':');
+	    my $case = $self->new_node('CaseClause');
+	    $case->add_node($e);
 	    my $statements = $self->new_node('StatementBlock');
 	    my @token;
 	    until (@token = $self->_check_token(['Label', '}'])) {
@@ -552,11 +734,11 @@ sub switch_statement {
 
 sub with_statement {
     my $self = shift;
-    my $n = $self->new_node('WithStatement');
     $self->_check_token_fatal('(');
     my $e = $self->expression or $self->_error("Object expression is needed in 'with'.");
-    $n->add_node($e);
     $self->_check_token_fatal(')');
+    my $n = $self->new_node('WithStatement');
+    $n->add_node($e);
     $self->{stat}{with}++;
     $n->add_node($self->statement);
     $self->{stat}{with}--;
@@ -565,40 +747,45 @@ sub with_statement {
 
 sub while_statement {
     my $self = shift;
-    my $n = $self->new_node('WhileStatement');
     $self->_check_token_fatal('(');
-    my $e = $self->expression;
-    $self->_check_token_fatal(')');
+    my $e = undef;
+    unless ($self->_check_token(')')) {
+	$e = $self->expression or $self->_error('Syntax error');
+	$self->_check_token_fatal(')');
+    }
     my $s = $self->statement;
-    if ($self->{stat}{Optimize} & 2 and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
+    if ($self->{stat}{Optimize} & O_CONSTEXP and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
 	if ($e->istrue) {
 	    $e = undef;
 	} else {
 	    return $self->new_node('NullStatement');
 	}
     }
+    my $n = $self->new_node('WhileStatement');
     $n->add_node($e, $s);
     return $n;
 }
 
 sub do_while_statement {
     my $self = shift;
-    my $n = $self->new_node('DoWhileStatement');
 
     my $s = $self->statement;
     my @token = $self->_check_token_fatal('Statement');
     $self->_error("'do' without 'while'.") if $token[0] ne 'while';
     $self->_check_token_fatal('(');
-    my $e = $self->expression;
-    $self->_check_token_fatal(')');
-
-    if ($self->{stat}{Optimize} & 2 and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
+    my $e = undef;
+    unless ($self->_check_token(')')) {
+	$e = $self->expression or $self->_error('Syntax error');
+	$self->_check_token_fatal(')');
+    }
+    if ($self->{stat}{Optimize} & O_CONSTEXP and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
 	if ($e->istrue) {
 	    $e = undef;
 	} else {
 	    return $s;
 	}
     }
+    my $n = $self->new_node('DoWhileStatement');
     $n->add_node($s, $e);
 
     return $n;
@@ -609,14 +796,17 @@ sub if_statement {
     my $line = $self->{line};
 
     $self->_check_token_fatal('(');
-                                                                                   my $e = $self->expression;
-    $self->_check_token_fatal(')');
+    my $e = undef;
+    unless ($self->_check_token(')')) {
+	$e = $self->expression or $self->_error('Syntax error');
+	$self->_check_token_fatal(')');
+    }
     my $then = $self->statement;
     my $else;
     if ($self->_check_token('Else')) {
 	$else = $self->statement;
     }
-    if ($self->{stat}{Optimize} & 2 and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
+    if ($self->{stat}{Optimize} & O_CONSTEXP and $e and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
 	if ($e->istrue) {
 	    return $then;
 	} else {
@@ -640,14 +830,27 @@ sub for_statement {
 	if (my @token = $self->_check_token('Statement')) {
 	    $self->_error('Syntax error.') if $token[0] ne 'var';
 	    $n->add_node($self->variable_declaration_list);
+	    $self->_check_token('StatementTerminator') or last;
 	} else {
-	    $n->add_node($self->expression);
+	    unless ($self->_check_token('StatementTerminator')) {
+		$n->add_node($self->expression);
+		$self->_check_token('StatementTerminator') or last;
+	    } else {
+		$n->add_node(undef);
+	    }
 	}
-	$self->_check_token('StatementTerminator') or last;
-	$n->add_node($self->expression);
-	$self->_check_token_fatal('StatementTerminator');
-	$n->add_node($self->expression);
-	$self->_check_token_fatal(')');
+	unless ($self->_check_token('StatementTerminator')) {
+	    $n->add_node($self->expression);
+	    $self->_check_token_fatal('StatementTerminator');
+	} else {
+	    $n->add_node(undef);
+	}
+	unless ($self->_check_token(')')) {
+	    $n->add_node($self->expression);
+	    $self->_check_token_fatal(')');
+	} else {
+	    $n->add_node(undef);
+	}
 	$n->add_node($self->statement);
 	return $n;
     }
@@ -659,8 +862,8 @@ sub for_statement {
 	    $self->_error('Syntax error.') if $token[0] ne 'var';
 	    $n->add_node($self->variable_declaration);
 	} else {
-	    my $l = ($self->call_expression||$self->member_expression);
-	    for (ref($l->{node}[-1])||ref($l)) {
+	    my $l = ($self->call_or_member_expression);
+	    for (defined($l) and ref($l->{node}[-1])||ref($l)) {
 		$self->_error("Left hand side of 'in' must be a variable or a property.") unless /:Variable$/ or /:Property$/ or /:Member$/ or ($self->{stat}{Version}<=5 and /:Arguments$/ and $l->{node}[0]{node}[0] eq 'eval');
 	    }
 	    $n->add_node($l);
@@ -674,43 +877,40 @@ sub for_statement {
     }
 }
 
-
 sub assignment_expression {
     my $self = shift;
-    my $keep = $self->_keep_context;
-    my $n = $self->new_node('AssignmentExpression');
 
-    if (my $l = ($self->call_expression||$self->member_expression)) {
+    if (my $l = $self->conditional_expression) {
 	my @op = $self->_get_token;
 	if ($op[1] eq 'AssignmentOp') {
 	    $self->_error("$_ Left hand side of '%s' must be a variable or a property.", $op[0]) unless $l->_lhs;
 	    my $v = $self->assignment_expression or $self->_error("Operator '%s' needs an operand.", $op[0]);
+	    my $n = $self->new_node('AssignmentExpression');
 	    $n->add_node($l, $op[0], $v);
 	    return $n;
+	} else {
+	    $self->_unget_token(@op);
+	    return $l;
 	}
-	$self->_restore_context($keep);
     }
-    return $self->conditional_expression;
+    return;
 }
 
 sub conditional_expression {
     my $self = shift;
-    my $keep = $self->_keep_context;
-    {
-	my $n = $self->new_node('ConditionalExpression');
-	my $e = $self->binary_op_expression or return;
-	$self->_check_token('ConditionalOp') or return $e;
-	my $a1 = $self->assignment_expression or last;
-	$self->_check_token(':') or last;
-	my $a2 = $self->assignment_expression or last;
-	if ($self->{stat}{Optimize} & 2 and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
-	    return $e->istrue ? $a1 : $a2;
-	}
-	$n->add_node($e, $a1, $a2);
-	return $n;
-    } 
-    $self->_restore_context($keep);
-    return;
+
+    my $e = $self->binary_op_expression or return;
+    $self->_check_token('ConditionalOp') or return $e;
+    ( my $a1 = $self->assignment_expression and
+      $self->_check_token(':') and
+      my $a2 = $self->assignment_expression )
+	or $self->_error('Syntax error');
+    if ($self->{stat}{Optimize} & O_CONSTEXP and $e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
+	return $e->istrue ? $a1 : $a2;
+    }
+    my $n = $self->new_node('ConditionalExpression');
+    $n->add_node($e, $a1, $a2);
+    return $n;
 }
 
 {
@@ -760,18 +960,17 @@ sub conditional_expression {
 
     sub binary_op_expression {
 	my ($self, $step) = @_;
-	my $keep = $self->_keep_context;
 	$step ||= 0;
 	{
 	    my (@op, $f);
 	    my $next = ($step >= 9) ? 'unary_expression' : 'binary_op_expression';
-	    my $n = $self->new_node('BinaryOpExpression');
 	    my $e1 = $self->$next($step+1) or return;
+	    my $n = $self->new_node('BinaryOpExpression');
 	    $n->add_node($e1);
 	    while((@op = $self->_get_token)[1] eq $bin_op[$step]) {
 		$f++;
 		my $e = $self->$next($step+1) or last;
-		if ($self->{stat}{Optimize} & 2 and 
+		if ($self->{stat}{Optimize} & O_CONSTEXP and 
 		    $e1->isa('SWF::Builder::ActionScript::SyntaxNode::Literal') and
 		    (
 		     $e ->isa('SWF::Builder::ActionScript::SyntaxNode::Literal') or
@@ -794,7 +993,6 @@ sub conditional_expression {
 		return $n;
 	    }
 	}
-	$self->_restore_context($keep);
 	return;
     }
 }
@@ -830,26 +1028,28 @@ sub conditional_expression {
 
     sub unary_expression {
 	my $self = shift;
-	my $n = $self->new_node('UnaryExpression');
 	my @unaryop = $self->_get_token;
 	
 	if ($unaryop[1] eq 'UnaryOp' or $unaryop[0] eq '-' or $unaryop[0] eq '+') {
 	    my $e = $self->unary_expression;
-	    if ($self->{stat}{Optimize} & 2 and 
+	    if ($self->{stat}{Optimize} & O_CONSTEXP and 
 		$e->isa('SWF::Builder::ActionScript::SyntaxNode::Literal')) {
 		return $literal_unaryop{$unaryop[0]}->($e);
 	    } else {
+		my $n = $self->new_node('UnaryExpression');
 		$n->add_node($e, $unaryop[0]);
 		return $n;
 	    }
 	} elsif ($unaryop[1] eq 'PrefixOp') {
 	    my $e = $self->unary_expression;
 	    $self->_error("Operator '%s' can modify only a variable or a property.", $unaryop[0]) unless $e->_lhs;
+	    my $n = $self->new_node('PrefixExpression');
 	    $n->add_node($e, $unaryop[0]);
-	    return bless $n, 'SWF::Builder::ActionScript::SyntaxNode::PrefixExpression';
+	    return $n;
 	} elsif ($unaryop[1] eq 'DeleteOp') {
+	    my $n = $self->new_node('DeleteExpression');
 	    $n->add_node($self->unary_expression, $unaryop[0]);
-	    return bless $n, 'SWF::Builder::ActionScript::SyntaxNode::DeleteExpression';
+	    return $n;
 	} else {
 	    $self->_unget_token(@unaryop);
 	    return $self->postfix_expression;
@@ -859,9 +1059,8 @@ sub conditional_expression {
 
 sub postfix_expression {
     my $self = shift;
-    my $n = $self->new_node('PostfixExpression');
 
-    my $e = ($self->call_expression || $self->new_expression) or return;
+    my $e = ($self->call_or_member_expression) or return;
     my @postop = $self->_get_token;
     if ($postop[0] eq '++' or $postop[0] eq '--') {
 	if ($postop[2]>=1) {
@@ -869,6 +1068,7 @@ sub postfix_expression {
 	    $self->_unget_token(';', 'StatementTerminator', 0);
 	    return $e;
 	} else {
+	    my $n = $self->new_node('PostfixExpression');
 	    $n->add_node($e, $postop[0]);
 	    return $n;
 	}
@@ -878,92 +1078,71 @@ sub postfix_expression {
     }
 }
 
-sub call_expression {
+sub call_or_member_expression {
     my $self = shift;
-    my $keep = $self->_keep_context;
 
-  CALL_EXPRESSION:
-    {
-	my $n = $self->new_node('CallExpression');
-	my $name = $self->member_expression or return;
-	($self->_get_token)[1] eq '(' or last;
-	my $args = $self->arguments or last;
-	my (@members, @methods, @token);
+    my $name = $self->member_expression or return;
 
-      CALL_MEMBER_LOOP:
-	for(;;) {
-	    my $m;
-	    @token = $self->_get_token;
-	    for ($token[1]) {
-		/^\($/ and do {
-		    $m = $self->arguments or last CALL_EXPRESSION;
-		    push @methods, $m;
-		    if (@members == 0 or ref($members[-1])=~/:MethodCall$/) {
-			push @members, $self->new_node('MethodCall');
-			$members[-1]->add_node('');
-		    } else {
-			bless $members[-1], 'SWF::Builder::ActionScript::SyntaxNode::MethodCall';
-		    }
-		    last;
-		};
-		/^\.$/ and do {
-		    $m = $self->member or last CALL_EXPRESSION;
-		    push @members, $m;
-		    last;
-		};
-		/^\[$/ and do {
-		    $m = $self->subscript or last CALL_EXPRESSION;
-		    push @members, $m;
-		    last;
-		};
-		last CALL_MEMBER_LOOP;
-	    }
-	}
-	$self->_unget_token(@token);
+    return $name unless ($self->_check_token('('));
 
-      FUNCtoLITERAL:
-	{
-	    if (@members == 0 and @methods == 0 and $self->{stat}{Optimize} & 4) {
-		my $sub;
-		if (ref($name)=~/:Variable$/) {
-		    $sub = '_f_'.lc($name->{node}[0]);
-		} elsif (ref($name)=~/:MemberExpression/ and lc($name->{node}[0]{node}[0]) eq 'math' and @{$name->{node}} == 2) {
-		    $sub = '_math_'.lc($name->{node}[1]{node}[0]);
+    my $args = $self->arguments or $self->_error('Syntax error');
+    my (@members, @methods, @token);
+
+  CALL_MEMBER_LOOP:
+    for(;;) {
+	my $m;
+	@token = $self->_get_token;
+	for ($token[1]) {
+	    /^\($/ and do {
+		$m = $self->arguments or $self->_error('Arguments are needed');
+		push @methods, $m;
+		if (@members == 0 or ref($members[-1])=~/:MethodCall$/) {
+		    push @members, $self->new_node('MethodCall');
+		    $members[-1]->add_node('');
 		} else {
-		    last FUNCtoLITERAL;
+		    bless $members[-1], 'SWF::Builder::ActionScript::SyntaxNode::MethodCall';
 		}
-		my @args;
-		for my $a (@{$args->{node}}) {
-		    last FUNCtoLITERAL unless ($a->isa('SWF::Builder::ActionScript::SyntaxNode::Literal'));
-		    push @args, $a;
-		}
-		last FUNCtoLITERAL if @args<=0;
-		last FUNCtoLITERAL unless $sub = $args[0]->can($sub);
-		return &$sub(@args);
-	    }
+		last;
+	    };
+	    /^\.$/ and do {
+		$m = $self->member or $self->_error('Member identifier is needed');
+		push @members, $m;
+		last;
+	    };
+	    /^\[$/ and do {
+		$m = $self->subscript or $self->_error('Member expression is needed');
+		push @members, $m;
+		last;
+	    };
+	    last CALL_MEMBER_LOOP;
 	}
-	$n->add_node($name, $args, \@members, \@methods);
-	return $n;
     }
-    $self->_restore_context($keep);
-    return;
-}
-
-sub new_expression {
-    my $self = shift;
-    my $keep = $self->_keep_context;
-
+    $self->_unget_token(@token);
+    
+  FUNCtoLITERAL:
     {
-	my $n = $self->new_node('NewExpression');
-	my $e = $self->member_expression;
-	return $e if $e;
-	$self->_check_token('New') or last;
-	$e = $self->new_expression or last;
-	$n->add_node($e, []);
-	return $n;
+	if (@members == 0 and @methods == 0 and $self->{stat}{Optimize} & O_CONSTMATH) {
+	    my $sub;
+	    if (ref($name)=~/:Variable$/) {
+		$sub = '_f_'.lc($name->{node}[0]);
+	    } elsif (ref($name)=~/:MemberExpression/ and lc($name->{node}[0]{node}[0]) eq 'math' and @{$name->{node}} == 2) {
+		$sub = '_math_'.lc($name->{node}[1]{node}[0]);
+	    } else {
+		last FUNCtoLITERAL;
+	    }
+	    my @args;
+	    for my $a (@{$args->{node}}) {
+		last FUNCtoLITERAL unless ($a->isa('SWF::Builder::ActionScript::SyntaxNode::Literal'));
+		push @args, $a;
+	    }
+	    last FUNCtoLITERAL if @args<=0;
+	    last FUNCtoLITERAL unless $sub = $args[0]->can($sub);
+	    return &$sub(@args);
+	}
     }
-    $self->_restore_context($keep);
-    return;
+    my $n = $self->new_node('CallExpression');
+    $n->add_node($name, $args, \@members, \@methods);
+    return $n;
 }
 
 {
@@ -1006,84 +1185,110 @@ sub new_expression {
 
     sub member_expression {
 	my $self = shift;
-	my $lv = shift;
-	my $keep = $self->_keep_context;
 	
-      MEMBER_EXPRESSION:
-	{
-	    my $n = $self->new_node('MemberExpression');
-	    my @tree;
-	    my @token = $self->_get_token;
-	    for ($token[1]) {
-		/^Function$/ and do{
-		    my $f = $self->function_expression or return;
-		    push @tree, $f;
-		    last;
-		};
-		/^New$/ and do {
-		    my $m = $self->member_expression('name') or return;
-		    $self->_check_token('(') or last MEMBER_EXPRESSION;
-		    my $args = $self->arguments or last MEMBER_EXPRESSION;
-		    my $newex = $self->new_node('NewExpression');
+	my @tree;
+	my @token = $self->_get_token;
+	for ($token[1]) {
+	    (/^Identifier$/ or /^Reserved$/) and do {
+		my $n = $self->new_node('Variable');
+		$n->add_node($token[0]);
+		$self->use_var($token[0]);
+		push @tree, $n;
+		last;
+	    };
+	    /Literal$/ and do {
+		my $n = $self->new_node($token[1]);
+		$n->add_node($token[0]);
+		push @tree, $n;
+		last;
+	    };
+	    /^Function$/ and do{
+		push @tree, $self->function_expression;
+		last;
+	    };
+	    /^New$/ and do {
+		my $m = $self->member_expression or $self->_error("Invalid expression in 'new'");
+		my $newex = $self->new_node('NewExpression');
+		if ($self->_check_token('(')) {
+		    my $args = $self->arguments or $self->_error('Syntax error00');
 		    $newex->add_node($m, $args);
-		    push @tree, $newex;
+		} else {
+		    $newex->add_node($m, $self->new_node('Arguments'));
+		}
+		push @tree, $newex;
+		last;
+	    };
+	    /^\(/ and do {
+		my $e = $self->expression;
+		$self->_check_token_fatal(')');
+		push @tree, $e;
+		last;
+	    };
+	    /^\{/ and do {
+		push @tree, $self->object_literal;
+		last;
+	    };
+	    /^\[/ and do {
+		push @tree, $self->array_literal;
+		last;
+	    };
+	    /^Property$/ and do {
+		my $n = $self->new_node($self->{stat}{with}>0 ? 'Variable' : 'Property');
+		$n->add_node($token[0]);
+		push @tree, $n;
+		last;
+	    };
+	    $self->_unget_token(@token);
+	    return;
+	}
+	
+      MEMBER_LOOP:
+	for (;;){
+	    @token = $self->_get_token;
+	    my $m;
+	    for ($token[1]) {
+		/^\.$/ and do {
+		    $m = $self->member or $self->_error('Syntax error');
 		    last;
 		};
-		$self->_unget_token(@token);
-		my $p = $self->primary_expression or last MEMBER_EXPRESSION;
-		push @tree, $p;
+		/^\[$/ and do {
+		    $m = $self->subscript or $self->_error('Syntax error');
+		    last;
+		};
+		last MEMBER_LOOP;
 	    }
-	    
-	  MEMBER_LOOP:
-	    for (;;){
-		@token = $self->_get_token;
-		my $m;
-		for ($token[1]) {
-		    /^\.$/ and do {
-			$m = $self->member or last MEMBER_EXPRESSION;
-			last;
-		    };
-		    /^\[$/ and do {
-			$m = $self->subscript or last MEMBER_EXPRESSION;
-			last;
-		    };
-		    last MEMBER_LOOP;
-		}
-		push @tree, $m;
-	    }
-	    $self->_unget_token(@token);
-	    
-	  PROPERTYtoLITERAL:
-	    {
-		last if @tree != 2 or !($self->{stat}{Optimize} & 4);
-		last unless (ref($tree[0])=~/:Variable/ and ref($tree[1])=~/:Member/);
-		my $prop = lc($tree[0]->{node}[0].'_'.$tree[1]->{node}[0]);
-		last unless exists $const_prop{$prop};
-		$n->add_node($const_prop{$prop});
-		bless $n, 'SWF::Builder::ActionScript::SyntaxNode::NumberLiteral';
-		$n->_chk_inf_nan;
-		return $n;
-	    }
-	    return $tree[0] if @tree <= 1;
-	    $n->add_node(@tree);
+	    push @tree, $m;
+	}
+	$self->_unget_token(@token);
+	
+      PROPERTYtoLITERAL:
+	{
+	    last if @tree != 2 or !($self->{stat}{Optimize} & O_CONSTMATH);
+	    last unless (ref($tree[0])=~/:Variable/ and ref($tree[1])=~/:Member/);
+	    my $prop = lc($tree[0]->{node}[0].'_'.$tree[1]->{node}[0]);
+	    last unless exists $const_prop{$prop};
+	    my $n = $self->new_node('NumberLiteral');
+	    $n->add_node($const_prop{$prop});
+	    $n->_chk_inf_nan;
 	    return $n;
 	}
-	$self->_restore_context($keep);
-	return;
+	return $tree[0] if @tree <= 1;
+	my $n = $self->new_node('MemberExpression');
+	$n->add_node(@tree);
+	return $n;
     }
 }
 
 sub subscript {
     my $self = shift;
-    my $n = $self->new_node('Member');
     my $e = $self->expression or return;
+    my $n = $self->new_node('Member');
     $n->add_node($e);
     return ($self->_check_token(']') and $n);
 }
 
 sub arguments {
     my $self = shift;
-    my $keep = $self->_keep_context;
     my $n = $self->new_node('Arguments');
 
   ARGUMENTS:
@@ -1097,17 +1302,16 @@ sub arguments {
 	    @token = $self->_get_token;
 	} while ($token[1] eq ',');
 	last ARGUMENTS unless $token[1] eq ')';
-return $n;
+	return $n;
     }
-    $self->_restore_context($keep);
-    return;
+    $self->_error('Syntax error');
 }
 
 sub member {
     my $self = shift;
-    my $n = $self->new_node('Member');
 
     if (my $i = $self->identifier) {
+	my $n = $self->new_node('Member');
 	$n->add_node($i);
 	return $n;
     } else {
@@ -1116,74 +1320,53 @@ sub member {
 }
 
 sub function_expression {
-    my $self = shift;
-    my $n = $self->new_node('FunctionExpression');
-    my @token;
-    my ($params, $statements);
+    my ($self, $name) = @_;
 
     $self->_check_token_fatal('(', "'(' is needed after 'function'");
-    $params = $self->new_node('FunctionParameter');
+
+    $self->new_scope;
+
+    my $params = $self->new_node('FunctionParameter');
+    my @token;
     unless ($self->_check_token(')')) {
 	do {
 	    my $i = $self->identifier or $self->_error('Identifier is needed in the argument list');
 	    $params->add_node($i);
+	    $self->add_var($i, 0, 1);
 	    @token = $self->_get_token;
 	} while ($token[1] eq ',');
 	$self->_error("Missing ')'") unless $token[1] eq ')';
     }
-    $self->_check_token_fatal('{', "Missing '{' for function.");
-    $statements = $self->new_node('SourceElements');
+    $self->_check_token_fatal('{', "Missing '{' for function '$name'");
+
+    my $statements = $self->new_node('SourceElements');
     until($self->_check_token('}')) {
 	my $c = ($self->function_declaration || $self->statement)
 	    or $self->_error("Syntax error. Missing '}' for function.");
-	if (ref($c)=~/:FunctionDeclaration$/) {
+	if ($self->{scope}[-1]) {
+	    for my $var (@{$self->{scope}[-1]{preload}}) {
+		my $n = $self->new_node('PreloadVar');
+		$n->add_node($var);
+		$statements->add_node($n);
+	    }
+	    $self->{scope}[-1]{preload} = [];
+	}
+	if (ref($c)=~/:Function$/) {
 	    $statements->unshift_node($c);
 	} else {
 	    $statements->add_node($c);
 	}
+	$self->countup_node;
     }
-    $n->add_node($params, $statements);
-    return $n;
-}
+    my $node = $self->new_node('Function');
+    $node->add_node($name, $params, $statements);
+    $self->exit_scope($node);
 
-sub primary_expression {
-    my $self = shift;
-    my $lv = shift;
-    my @token = $self->_get_token;
-    
-    for($token[1]) {
-	/^\(/ and do {
-	    my $keep = $self->_keep_context;
-	    my $e = $self->expression;
-	    return $e if $self->_check_token(')');
-	    $self->_restore_context($keep);
-	    return;
-	};
-	/^\{/ and return $self->object_literal;
-	/^\[/ and return $self->array_literal;
-	/Literal$/ and do {
-	    my $n = $self->new_node($token[1]);
-	    $n->add_node($token[0]);
-	    return $n;
-	};
-	(/^Identifier$/ or /^Reserved$/) and do {
-	    my $n = $self->new_node('Variable');
-	    $n->add_node($token[0]);
-	    return $n;
-	};
-	/^Property$/ and do {
-	    my $n = $self->new_node($self->{stat}{with}>0 ? 'Variable' : 'Property');
-	    $n->add_node($token[0]);
-	    return $n;
-	};
-	$self->_unget_token(@token);
-	return;
-    }
+    return $node;
 }
 
 sub object_literal {
     my $self = shift;
-    my $keep = $self->_keep_context;
     my $n = $self->new_node('ObjectLiteral');
 
   OBJECT:
@@ -1204,13 +1387,11 @@ sub object_literal {
 	last OBJECT unless $token[1] eq '}';
 	return $n;
     }
-    $self->_restore_context($keep);
-    return;
+    $self->_error('Syntax error');
 }
 
 sub array_literal {
     my $self = shift;
-    my $keep = $self->_keep_context;
     my $n = $self->new_node('ArrayLiteral');
 
   ARRAY:
@@ -1227,13 +1408,11 @@ sub array_literal {
 	last ARRAY unless $token[1] eq ']';
 	return $n;
     }
-    $self->_restore_context($keep);
-    return;
+    $self->_error('Syntax error');
 }
 
 sub expression {
     my $self = shift;
-    my $n = $self->new_node('Expression');
     my @tree;
     my @comma;
 
@@ -1245,6 +1424,7 @@ sub expression {
     if (@tree <= 0) {
 	return $e;
     } else {
+	my $n = $self->new_node('Expression');
 	$n->add_node($e, @tree);
 	return $n;
     }
@@ -1262,7 +1442,7 @@ sub _statement_terminator {
     my $self = shift;
     my @token = $self->_get_token;
     unless ($token[1] eq 'StatementTerminator') {
-	if ($token[1] eq '}' or $token[2]>=1 or !defined $token[1]) {
+	if ($token[1] eq '}' or $token[2]>=1 or $token[1] eq '') {
 	    $self->_unget_token(@token);
 	    return 1;
 	}
@@ -1272,60 +1452,7 @@ sub _statement_terminator {
     return 1;
 }
 
-sub new {
-    my $class = shift;
-    my $text = shift;
-    my %option = @_;
-
-    my $new = bless {
-	text => $text,
-	line => 1,
-	ungets => [],
-	stat => {
-	    code => [],
-	    label => 'A',
-	    loop => [],
-	    with => 0,
-	    Trace => 'eval',
-	    Warning => 1,
-	    Optimize => 0xffff,
-	    Version => 6,
-	},
-    }, $class;
-
-=begin comment
-
-Optimize
-bit 0: peephole optimization
-    1: calculate constant expressions
-    2: calculate math funcs with constant args and constant properties
-    3: evaluate the lefthand side of assignment expression only once 
-
-=end
-
-=cut
-
-    for my $o (qw/Warning Optimize Version Trace/) {
-	$new->{stat}{$o} = $option{$o} if defined $option{$o};
-    }
-
-    return $new;
-}
-
-sub compile {
-    my ($self, $actions) = @_;
-    my $tree = $self->source_elements;
-    my $option = $actions||'';
-
-    $tree->_tree_dump, return if $option eq 'tree';
-    $tree->compile;
-    $self->_tidy_up;
-    $self->_code_print, return if $option eq 'text';
-    $actions = SWF::Element::Array::ACTIONRECORDARRAY->new unless ref($actions);
-    $self->_encode($actions);
-    $actions->dumper, return if $option eq 'dump';
-    $actions;
-}
+### code generator
 
 sub _code_print {
     my $self = shift;
@@ -1408,6 +1535,25 @@ sub _code_print {
 		$tag->CodeSize( $self->{stat}{labelhash}{$self->{stat}{labelhash}{pop @args}} );
 		$tag->FunctionName($fname);
 		$tag->Params(\@args);
+	    } elsif ($action eq 'DefineFunction2') {
+		$tag = SWF::Element::ACTIONRECORD->new( Tag => 'ActionDefineFunction2');
+		$param =~ s/ *\'((\\.|[^\'])*)\' *//;
+		my $fname = $1;
+		utf2bin($fname);
+		my ($regcount, $flag, @args) = split ' ', $param;
+		utf2bin($_) for @args;
+		$tag->CodeSize( $self->{stat}{labelhash}{$self->{stat}{labelhash}{pop @args}} );
+		$tag->FunctionName($fname);
+		$tag->RegisterCount($regcount);
+		$tag->Flags($flag);
+		my $regp = $tag->Parameters;
+		for my $arg (@args) {
+		    my $n = $regp->new_element;
+		    my @r = split /=/, $arg;
+		    $n->ParamName($r[0]);
+		    $n->Register($r[1]);
+		    push @$regp, $n;
+		}
 	    } elsif (exists $encode{$action}) {
 		my @args = ($param =~ /\'((\\.|[^\'])*)\'/g);
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => $action);
@@ -1479,7 +1625,7 @@ sub _tidy_up {
 TIDYUP:
     for (my $p = 0; $p < @$code; $p++) {
 	for ($code->[$p]) {
-	    if ($self->{stat}{Optimize} & 1) {
+	    if ($self->{stat}{Optimize} & O_PEEPHOLE) {
 # delete double not
 		(/^Not$/ and $code->[$p+1] eq 'Not') and do {
 		    splice(@$code, $p, 2);
@@ -1551,7 +1697,6 @@ TIDYUP:
 	my $msgform = shift;
 
 	die sprintf($msgform, @_)." in ".$self->{line}."\n";
-#Carp::cluck sprintf($msgform, @_)." in ".$self->{line}."\n";
     }
 
     sub _warn {
@@ -1644,8 +1789,14 @@ TIDYUP:
     sub compile {
 	my ($self, $context) = @_;   # $context = lvalue if 'for var x in ...'
 	my $code = $self->{stat}{code};
+	my $regvars = $self->{regvars};
+	my $var = $self->{node}[0];
 
-	push @$code, "Push String '".$self->{node}[0]."'", ($context eq 'lvalue' ? "DefineLocal" : "DefineLocal2");
+	if ($regvars and exists $regvars->{$var}) {
+	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop', -2 if $context eq 'lvalue';
+	} else {
+	    push @$code, "Push String '$var'", ($context eq 'lvalue' ? ("DefineLocal", -1) : ("DefineLocal2"));
+	}
     }
 }
 
@@ -1656,10 +1807,17 @@ TIDYUP:
     sub compile {
 	my $self = shift;
 	my $code = $self->{stat}{code};
+	my $regvars = $self->{regvars};
+	my $var = $self->{node}[0];
 
-	push @$code, "Push String '".$self->{node}[0]."'";
-	$self->{node}[1]->compile('value');
-	push @$code, "DefineLocal";
+	if ($regvars and exists $regvars->{$var}) {
+	    $self->{node}[1]->compile('value');
+	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop';
+	} else {
+	    push @$code, "Push String '$var'";
+	    $self->{node}[1]->compile('value');
+	    push @$code, "DefineLocal";
+	}
     }
 }
 
@@ -1718,6 +1876,21 @@ TIDYUP:
 		$self->_warn(1, "Useless use of '$op' in void context.");
 	    }
 	}
+    }
+}
+
+{
+    package SWF::Builder::ActionScript::SyntaxNode::Expression;
+    our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
+
+    sub compile {
+	my ($self, $context) = @_;
+	my $last = pop @{$self->{node}};
+
+	for my $e (@{$self->{node}}) {
+	    $e->compile;
+	}
+	$last->compile($context);
     }
 }
 
@@ -2099,12 +2272,16 @@ TIDYUP:
     sub _chk_inf_nan {
 	my $self = shift;
 	my $value = $self->{node}[0];
-	my $packed = pack('d', $value);
 
-	if ($value eq 'NaN' or $packed eq $IND or $packed eq $NAN) {
+	return bless $self, 'SWF::Builder::ActionScript::SyntaxNode::NaN' if $value eq 'NaN';
+
+	my $packed = pack('d', $value);
+	return $self if (($packed & $INF) ne $INF);
+
+	if (($packed & $MANTISSA) ne "\x00" x 8) {
 	    $self->{node}[0] = 'NaN';
 	    bless $self, 'SWF::Builder::ActionScript::SyntaxNode::NaN';
-	} elsif ($packed eq $INF or $packed eq $NINF) {
+	} else {
 	    bless $self, 'SWF::Builder::ActionScript::SyntaxNode::Infinity';
 	}
 	$self;
@@ -2313,13 +2490,29 @@ TIDYUP:
 	my ($self, $context) = @_;
 	($context =~/lc?value/) and SWF::Builder::ActionScript::SyntaxNode::_error("Can't modify literal item");
 	my $code = $self->{stat}{code};
-	my $count = @$self;
-	while (@$self) {
-	    my $value = shift @$self;
+	my $count = @{$self->{node}};
+	for my $value (@{$self->{node}}) {
 	    $value->compile('value');
 	}
 	push @$code, "Push Number '$count'", "InitArray";
 	push @$code, "Pop" unless $context;
+    }
+}
+{
+    package SWF::Builder::ActionScript::SyntaxNode::PreloadVar;
+    our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
+
+    sub compile {
+	my $self = shift;
+	my $var = $self->{node}[0];
+	my $regvars = $self->{regvars};
+	if ($regvars and exists $regvars->{$var}) {
+	    push @{$self->{stat}{code}}, "Push String '$var'"
+		                 , "GetVariable"
+		                 , "StoreRegister '".$regvars->{$var}."'"
+		                 , "Pop";
+	}
+	$self;
     }
 }
 {
@@ -2329,13 +2522,19 @@ TIDYUP:
     sub compile {
 	my ($self, $context) = @_;
 	my $code = $self->{stat}{code};
+	my $regvars = $self->{regvars};
+	my $var = $self->{node}[0];
 
-	(my $type = ref($self)) =~s/^.+://;
-	push @$code, "Push String '".$self->{node}[0]."'";
-	push @$code, 'GetVariable' if $context eq 'value' or not $context;
-	push @$code, 'SetVariable' if $context eq 'lvalue';
-	push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable' if $context eq 'lcvalue';
-	push @$code, "Pop" unless $context;
+	if ($regvars and exists $regvars->{$var}) {
+	    push @$code, "Push Register '".$regvars->{$var}."'" if $context eq 'value' or $context eq 'lcvalue';
+	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop', -2 if $context eq 'lvalue' or $context eq 'lcvalue';
+	} else {
+	    push @$code, "Push String '$var'";
+	    push @$code, 'GetVariable' if $context eq 'value' or not $context;
+	    push @$code, 'SetVariable', -1 if $context eq 'lvalue';
+	    push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable', -1 if $context eq 'lcvalue';
+	    push @$code, "Pop" unless $context;
+	}
 	$self;
     }
 
@@ -2348,13 +2547,11 @@ TIDYUP:
     sub compile {
 	my ($self, $context) = @_;
 	my $code = $self->{stat}{code};
-	(my $type = ref($self)) =~s/^.+://;
 	push @$code, "Push String '' ";
-#	push @$code, "Push Number '".$property{lc $self->{node}[0]}."'";
 	push @$code, "Push Property '".lc($self->{node}[0])."'";
 	push @$code, 'GetProperty' if $context eq 'value' or not $context;
-	push @$code, 'SetProperty' if $context eq 'lvalue';
-	push @$code, "Push String '' ", "Push Property '".lc($self->{node}[0])."'", 'GetProperty', 'SetProperty' if $context eq 'lcvalue';
+	push @$code, 'SetProperty', -1 if $context eq 'lvalue';
+	push @$code, "Push String '' ", "Push Property '".lc($self->{node}[0])."'", 'GetProperty', 'SetProperty', -1 if $context eq 'lcvalue';
 	push @$code, "Pop" unless $context;
 	$self;
     }
@@ -2399,11 +2596,11 @@ TIDYUP:
 	    push @$code, "Push String '".$member."'";
 	}
 	if ($context eq 'lvalue') {
-	    push @$code, 'SetMember';
+	    push @$code, 'SetMember', -1;
 	} elsif ($context eq 'value') {
 	    push @$code, 'GetMember';
 	} elsif ($context eq 'lcvalue') {
-	    push @$code, "StoreRegister '0'",'GetMember', "Push Register '0'", 'StackSwap', 'SetMember';
+	    push @$code, "StoreRegister '0'",'GetMember', "Push Register '0'", 'StackSwap', 'SetMember', -1;
 	} elsif (not defined $context) {
 	    push @$code, 'GetMember', 'Pop';
 	}
@@ -2413,6 +2610,7 @@ TIDYUP:
 {
     package SWF::Builder::ActionScript::SyntaxNode::AssignmentExpression;
     our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
+    use constant \%O;
 
     my %as_ops =
 	( '*='   => 'Multiply',
@@ -2432,16 +2630,17 @@ TIDYUP:
 	my ($self, $context) = @_;
 	my ($lhe, $op, $e) = @{$self->{node}};
 	my $code = $self->{stat}{code};
-	my $opt = $self->{stat}{Optimize} & 8;
+	my $opt = $self->{stat}{Optimize} & O_LEFTONCE;
 	my $as_context = ($op eq '=' or !$opt)? 'lvalue' : 'lcvalue'; 
 
 	$lhe->compile($as_context);
 	my $lv = pop @$code;
+	my @lv = splice(@$code, $lv);
 	$lhe->compile('value') if (!$opt and $op ne '=');
 	$e->compile('value');
 	push @$code, $as_ops{$op} if exists $as_ops{$op};
 	push @$code, "StoreRegister '0'" if $context;
-	push @$code, $lv;
+	push @$code, @lv;
 	push @$code, "Push Register '0'" if $context;
     }
 }
@@ -2526,17 +2725,29 @@ TIDYUP:
 {
     package SWF::Builder::ActionScript::SyntaxNode::ReturnStatement;
     our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
+    use constant \%O;
 
     sub compile {
 	my $self = shift;
 	my $ret = shift(@{$self->{node}});
+	my $opt = $self->{stat}{Optimize};
 	my $code = $self->{stat}{code};
+
 
 	if (defined($ret)) {
 	    $ret->compile('value');
 	} else {
 	    push @$code, "Push UNDEF ''";
 	}
+
+	if (($opt & O_REGISTER) and !($opt & O_LOCALREG) and (my $regcount = $self->{regvars}{' regcount'}) > 0) {
+	    push @$code, "StoreRegister '0'", "Pop";
+	    for (my $i = $regcount; $i >= 1; $i--) {
+		push @$code, "StoreRegister '$i'", "Pop";
+	    }
+	    push @$code, "Push Register '0'";
+	}
+
 	push @$code, "Return";
     }
 }
@@ -2669,7 +2880,8 @@ TIDYUP:
 	push @$code, "Enumerate2", ":$cont_label", "StoreRegister '0'", "Push NULL ''", "Equals2", "If '$loop_out'";
 	$var->compile('lvalue');
 	my $lv = pop @$code;
-	push @$code, "Push Register '0'", $lv;
+	my @lv = splice(@$code, $lv);
+	push @$code, "Push Register '0'", @lv;
 	$statements->compile;
 	push @$code, "Jump '$cont_label'";
 	if ($loop->[-1][-1]>0) {
@@ -2767,37 +2979,71 @@ TIDYUP:
 
 @SWF::Builder::ActionScript::SyntaxNode::FunctionParameter::ISA=('SWF::Builder::ActionScript::SyntaxNode');
 {
-    package SWF::Builder::ActionScript::SyntaxNode::FunctionDeclaration;
+    package SWF::Builder::ActionScript::SyntaxNode::Function;
     our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
-
-    sub compile {
-	my $self = shift;
-	my $stat = $self->{stat};
-	my $code = $stat->{code};
-	my $node = $self->{node};
-	my $label = $stat->{label}++;
-	my $args = (defined $node->[1]{node}) ? join(' ', @{$node->[1]{node}}) : '';
- 
-	push @$code, "DefineFunction '".$node->[0]."' $args $label";
-	$node->[2]->compile;
-	push @$code, ":$label";
-    }
-}
-{
-    package SWF::Builder::ActionScript::SyntaxNode::FunctionExpression;
-    our @ISA = ('SWF::Builder::ActionScript::SyntaxNode');
+    use constant \%O;
 
     sub compile {
 	my ($self, $context) = @_;
-	my $code = $self->{stat}{code};
-	my $label = $self->{stat}{label}++;
+	my $stat = $self->{stat};
+	my $code = $stat->{code};
 	my $node = $self->{node};
-	my $args = (defined $node->[0]{node}) ? join(' ', @{$node->[0]{node}}) : '';
 
-	push @$code, "DefineFunction '' $args $label";
-	$node->[1]->compile;
+	if ($context and $node->[0]) {
+	    $self->_error('Can\'t declare named function in the expression');
+	} elsif(!$context and !$node->[0]) {
+	    $self->_error('Function name is necessary to declare function');
+	}
+
+	my $label = $stat->{label}++;
+	my @args = (defined $node->[1]{node}) ? @{$node->[1]{node}} : ();
+ 
+	if ($stat->{Optimize} & O_LOCALREG) {
+	    my $flags = 0;
+	    my $bit = 0;
+	    my $regvars = $self->{regvars};
+	    for my $prevar (qw/ this arguments super /) {
+		if (exists $regvars->{$prevar}) {
+		    $flags |= 1<<$bit;
+			$bit += 2;
+		} else {
+		    $bit++;
+		    $flags |= 1<<$bit;
+		    $bit++;
+		}
+	    }
+	    for my $prevar (qw/ _root _parent _global /) {
+		if (exists $regvars->{$prevar}) {
+		    $flags |= 1<<$bit;
+			$bit ++;
+		}
+	    }
+	    for my $arg (@args) {
+		$arg .= '='.$regvars->{$arg} if exists $regvars->{$arg};
+	    }
+	    push @$code, "DefineFunction2 '".$node->[0]."' ".join(' ', $regvars->{' regcount'}, $flags, @args, $label);
+	    $node->[2]->compile;
+	} else {
+	    push @$code, "DefineFunction '".$node->[0]."' ".join(' ', @args, $label);
+	    if (($stat->{Optimize} & O_REGISTER) and (my $regcount = $self->{regvars}{' regcount'}) > 0) {
+
+		my $push = 'Push ';
+		for (1..$regcount) {
+		    $push .= "Register '$_', ";
+		}
+		$push =~ s/, $//;
+		push @$code, $push;
+
+		$node->[2]->compile;
+
+		for (my $i = $regcount; $i >= 1; $i--) {
+		    push @$code, "StoreRegister '$i'", "Pop";
+		}
+	    } else {
+		$node->[2]->compile;
+	    }
+	}
 	push @$code, ":$label";
-	push @$code, "Pop" unless $context;
     }
 }
 {
@@ -2912,9 +3158,9 @@ TIDYUP:
 	if ($context eq 'value' or not $context) {
 	    push @$code, 'GetVariable';
 	} elsif ($context eq 'lvalue') {
-	    push @$code, 'SetVariable';
+	    push @$code, 'SetVariable', -1;
 	} elsif ($context eq 'lcvalue') {
-	    push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable';
+	    push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable', -1;
 	}
     }
 
@@ -2945,13 +3191,12 @@ TIDYUP:
 	my ($self, $args) = @_;
 	my $code = $self->{stat}{code};
 	my $target = $args->{node}[0];
-	my $property = lc $args->{node}[1]{node}[0];
+	my $property = lc($args->{node}[1]{node}[0]);
 
 	$self->_error_param('getProperty') if @{$args->{node}} != 2;
 	$self->_error("'%s' is not a property identifier.", $property) unless exists $property{$property};
 	$self->_warn(0, "'getProperty' is not recommended to use."); 
 	$target->compile('value');
-#	push @$code, "Push Number '".$property{$property}."'", 'GetProperty';
 	push @$code, "Push Property '".$property."'", 'GetProperty';
     }
 
@@ -2961,13 +3206,12 @@ TIDYUP:
 
 	my $code = $self->{stat}{code};
 	my $target = $args->{node}[0];
-	my $property = lc $args->{node}[1]{node}[0];
+	my $property = lc($args->{node}[1]{node}[0]);
 	my $value = $args->{node}[2];
 
 	$self->_error("'%s' is not a property identifier.", $property) unless exists $property{$property};
 	$self->_warn(0, "'setProperty' is not recommended to use."); 
 	$target->compile('value');
-#	push @$code, "Push Number '".$property{$property}."'";
 	push @$code, "Push Property '".$property."'";
 	$value->compile('value');
 	push @$code, 'SetProperty', "Push UNDEF ''";
@@ -2992,7 +3236,7 @@ TIDYUP:
 	} else {
 	    if (defined $method) {
 		$self->_error("Third parameter of 'getURL' must be 'GET' or 'POST'.") unless ref($method) =~/:StringLiteral/;
-		$method = lc $method->{node}[0];
+		$method = lc($method->{node}[0]);
 		$self->_error("Third parameter of 'getURL' must be 'GET' or 'POST'.") unless $method eq 'get' or $method eq 'post';
 		$method = $method eq 'get' ? 1 : 2;
 	    } else {
@@ -3178,10 +3422,10 @@ TIDYUP:
 	my ($target, $bbox) = @{$args->{node}};
 
 	$self->_error("Second parameter of '$scheme' must be 'bframe', 'bmax' or 'bmovie'.") unless ref($bbox) =~/:StringLiteral/;
-	$bbox = lc $bbox->{node}[0];
+	$bbox = lc($bbox->{node}[0]);
 	$self->_error("Second parameter of '$scheme' must be 'bframe', 'bmax' or 'bmovie'.") unless $bbox eq 'bframe' or $bbox eq 'bmax' or $bbox eq 'bmovie';
 
-	($scheme = lc $scheme) =~s/num$//;
+	($scheme = lc($scheme)) =~s/num$//;
 	if ($bbox eq 'bmovie') {
 	    push @$code, "Push String '$scheme:'";
 	} else {
@@ -3431,9 +3675,10 @@ TIDYUP:
 
 	$self->{node}[0]->compile('lcvalue');
 	my $lv = pop @$code;
+	my @lv = splice(@$code, $lv);
 	push @$code, $self->{node}[1] eq '++' ? 'Increment' : 'Decrement';
 	push @$code, "StoreRegister '0'" if $context;
-	push @$code, $lv;
+	push @$code, @lv;
 	push @$code, "Push Register '0'" if $context;
     }
 }
@@ -3448,9 +3693,10 @@ TIDYUP:
 
 	$self->{node}[0]->compile('lcvalue');
 	my $lv = pop @$code;
+	my @lv = splice(@$code, $lv);
 	push @$code, "StoreRegister '0'" if $context;
 	push @$code, $self->{node}[1] eq '++' ? 'Increment' : 'Decrement';
-	push @$code, $lv;
+	push @$code, @lv;
 	push @$code, "Push Register '0'" if $context;
     }
 }

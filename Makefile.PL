@@ -5,7 +5,12 @@ WriteMakefile(
     'NAME'	=> 'SWF::Builder',
     'VERSION_FROM' => 'lib/SWF/Builder.pm', # finds $VERSION
     'PREREQ_PM' => {
-	'SWF::Element' => 0.29,
+        'Compress::Zlib'  => 0,
+	'Font::TTF::Ttc'  => 0,
+	'SWF::BinStream'  => 0,
+	'SWF::File'       => 0,
+	'SWF::Parser'     => 0,
+	'SWF::Element'    => 0.29,
 	'Font::TTF::Font' => 0.34,
     },
     'EXE_FILES' => ['scripts/asc.plx'],

@@ -8,7 +8,7 @@ use SWF::Element;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.03";
+our $VERSION="0.031";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -58,7 +58,7 @@ package SWF::Builder::Character::Bitmap::JPEG;
 use Compress::Zlib;
 use Carp;
 
-@SWF::Builder::Character::Bitmap::JPEG::ISA = qw/ SWF::Builder::character::Bitmap::Def /;
+@SWF::Builder::Character::Bitmap::JPEG::ISA = qw/ SWF::Builder::Character::Bitmap::Def /;
 
 sub new {
     my ($class, %param) = @_;
@@ -293,7 +293,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::Bitmap - SWF Bitmap object
+SWF::Builder::Character::Bitmap - SWF Bitmap object
 
 =head1 SYNOPSIS
 

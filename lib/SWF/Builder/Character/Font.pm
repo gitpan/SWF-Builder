@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.04";
+our $VERSION="0.041";
 
 our %indirect;
 
@@ -373,7 +373,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::Font - SWF font object
+SWF::Builder::Character::Font - SWF font object
 
 =head1 SYNOPSIS
 

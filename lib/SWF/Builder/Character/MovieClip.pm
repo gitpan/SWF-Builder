@@ -9,7 +9,7 @@ use SWF::Builder;
 
 use Carp;
 
-our $VERSION='0.03';
+our $VERSION='0.04';
 
 @SWF::Builder::Character::MovieClip::ISA = ('SWF::Builder::Character::Displayable');
 
@@ -55,8 +55,11 @@ sub _pack {
 
 sub init_action {
     require SWF::Builder::ActionScript;
+    my $self = shift;
 
-    shift->{_init_action} = SWF::Builder::ActionScript->new;
+    my $action = SWF::Builder::ActionScript->new(Version => $self->{_root}{_version});
+    $self->{_init_action} = $action->{_actions};
+    return $action;
 }
 
 sub _destroy {
@@ -112,7 +115,9 @@ sub on {
     croak "$event is not a valid clip action event" if $@;
     push @$clipactions, $newaction;
     $newaction->KeyCode($special_keys{$key} || ord($key)) if $event eq 'KeyPress';
-    $newaction->Actions(SWF::Builder::ActionScript->new);
+    my $action = SWF::Builder::ActionScript->new(Version => $self->{_root}{_version});
+    $newaction->Actions($action->{_actions});
+    return $action;
 }
 
 *onClipEvent = \&on;
@@ -125,7 +130,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::MovieClip - SWF movie clip object.
+SWF::Builder::Character::MovieClip - SWF movie clip object.
 
 =head1 SYNOPSIS
 

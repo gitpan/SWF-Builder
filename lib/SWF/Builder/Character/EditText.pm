@@ -3,7 +3,7 @@ package SWF::Builder::Character::EditText;
 use strict;
 use utf8;
 
-our $VERSION="0.01";
+our $VERSION="0.011";
 
 @SWF::Builder::Character::EditText::ISA = qw/ SWF::Builder::Character::Displayable SWF::Builder::ExElement::Color::AddColor/;
 
@@ -278,7 +278,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::EditText - SWF dynamic editable text object
+SWF::Builder::Character::EditText - SWF dynamic editable text object
 
 =head1 SYNOPSIS
 

@@ -7,19 +7,26 @@ use SWF::Element;
 use SWF::Builder;
 use SWF::Builder::ExElement;
 
-our $VERSION = "0.02";
+our $VERSION = "0.03";
 
-@SWF::Builder::ActionScript::ISA = qw/ SWF::Element::Array::ACTIONRECORDARRAY /;
+sub new {
+    my ($class, %param) = @_;
+    bless {
+	_version => $param{Version}||6,
+	_actions => SWF::Element::Array::ACTIONRECORDARRAY->new,
+    }, $class;
+}
 
 sub _add_tags {
     my $self = shift;
+    my $actions = $self->{_actions};
 
-    if ($self->[-1] and $self->[-1]->Tag == 0) {
-	if (my $label = pop(@$self)->LocalLabel) {
-	    push @$self, SWF::Element::ACTIONRECORD->new( 'Tag', @{+shift}, LocalLabel => $label );
+    if ($actions->[-1] and $actions->[-1]->Tag == 0) {
+	if (my $label = pop(@$actions)->LocalLabel) {
+	    push @$actions, SWF::Element::ACTIONRECORD->new( 'Tag', @{+shift}, LocalLabel => $label );
 	}
     }
-    push @$self, map { SWF::Element::ACTIONRECORD->new( 'Tag', @$_)} @_;
+    push @$actions, map { SWF::Element::ACTIONRECORD->new( 'Tag', @$_)} @_;
     $self;
 }
 
@@ -177,9 +184,9 @@ sub compile {
     require SWF::Builder::ActionScript::Compiler;
 
     my $self = shift;
-    my $c = SWF::Builder::ActionScript::Compiler->new(@_);
+    my $c = SWF::Builder::ActionScript::Compiler->new(@_, Version => $self->{_version});
 
-    $c->compile($self);
+    $c->compile($self->{_actions});
 }
 
 sub load {
@@ -317,23 +324,30 @@ Options are as follows:
 
 =over 4
 
-=item Optimize => $num
+=item Optimize => $opt_string
 
-controls optimization.
+controls optimization. 
+Optimize option strings are as follows:
 
- bit 0: peephole optimization
-     1: calculate constant expressions
-     2: calculate math funcions with constant args and constant properties
-     3: evaluate a lefthand side of an assignment expression only once 
+ O_PEEPHOLE  peephole optimization.
+ O_CONSTEXP  calculate constant expressions.
+ O_CONSTMATH calculate math funcions with constant args and constant properties.
+ O_LEFTONCE  evaluate a lefthand side of an assignment expression only once. See ATTENTION.
+ O_REGISTER  assign local variables to registers.
+ O_LOCALREG  assign local variables to local registers using ActionDefineFunction2 (aka 'Optimize for Flash Player 6r65').
+ O_6R65      same as 'O_LOCALREG'.
+ O_ALL       enable all optimize options.
 
-Default is all on.
+If you want to reset an optimize option, put a minus sign on the head of the option. 
+All optimize options are joined with space or '|'.
+Default is 'O_ALL|-O_REGISTER|-O_LOCALREG' (enable all optimize options except O_REGISTER and O_LOCALREG).
 
 ATTENTION: FlashMX ActionScript compiler seems to evaluate a lefthand
 side of a compound assignment operator twice, while ECMA-262 provides
 to evaluate it once.
 For example, FlashMX compiles 'a[i++] += 2' as same as 'a[i++] = a[i++] + 2',
 which counts up i twice.
-Optimize bit 3 controls this. If you want the same as FlashMX, reset bit 3.
+O_LEFTONCE controls this. If you want the same as FlashMX, give '-O_LEFTONCE'.
 
 =item Trace => $mode
 
@@ -341,21 +355,21 @@ tells the compiler how to compile 'trace' action.
 
 =over 4
 
-=item none
+=item 'none'
 
 ignore all trace action.
 
-=item eval
+=item 'eval'
 
 evaluate the parameters of a trace action, but don't output anything.
 This is default.
 
-=item lcwin
+=item 'lcwin'
 
 output the value to another movie via a LocalConnection.
 You can use 'tracewindow.swf' at scripts directory as output window.
 
-=item trace
+=item 'trace'
 
 use ActionTrace tag.
 
@@ -367,7 +381,7 @@ sets the warning level.
 
  0: deplicated actions.
  1: useless operator in void context.
- 2: future reserved and other unsupported feature.
+ 2: future reserved and other unsupported features.
 
 =back
 

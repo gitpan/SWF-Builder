@@ -1,7 +1,15 @@
 Revision history for Perl extension SWF::Builder.
 
+0.06 Thu Sep 10 00:00:30 2004
+	- Fixed @SWF::Builder::Character::Bitmap::JPEG::ISA.
+	- Support SWF version control (6 or later).
+	- Fixed many ActionScript compiler bugs.
+	- Changed optimization option of AS compiler.
+	- Support register optimization by AS compiler.
+	- Improved compile speed.
+
 0.05 Sat Jul 10 23:24:25 2004
-	- Changeed some module pathes.
+	- Changed some module pathes.
 	- Support dynamic texts.
 	- Support export and import assets.
 	- Support init actions for movie clips.

@@ -3,7 +3,7 @@ package SWF::Builder::Character::Text;
 use strict;
 use utf8;
 
-our $VERSION="0.03";
+our $VERSION="0.031";
 
 @SWF::Builder::Character::Text::ISA = qw/ SWF::Builder::Character::UsableAsMask /;
 @SWF::Builder::Character::Text::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Text /;
@@ -293,7 +293,7 @@ __END__
 
 =head1 NAME
 
-SWF::Builder::Text - SWF static text object
+SWF::Builder::Character::Text - SWF static text object
 
 =head1 SYNOPSIS
 

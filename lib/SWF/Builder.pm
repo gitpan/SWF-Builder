@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 @SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');
@@ -17,16 +17,17 @@ my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 sub new {
     my $class = shift;
     my %param = @_;
+    my $version = $param{Version} || 6;
     my $self = bless {
 	_file =>
 	  SWF::File->new(undef,
-			 Version => 6,
+			 Version => $version,
 			 FrameRate => $param{FrameRate},
 			 FrameSize => [ map {$_*20} @{$param{FrameSize}}],
 			 ),
 	_backgroundcolor => $param{BackgroundColor},
 	_root =>
-	  SWF::Builder::Movie::Root->new,
+	  SWF::Builder::Movie::Root->new(Version => $version)
     }, $class;
     $self->_init_is_alpha;
     $self;
@@ -273,7 +274,9 @@ sub frame_action {
 
     my $tag = SWF::Element::Tag::DoAction->new;
     push @{$self->{_frame_list}[$frame-1]}, $tag;
-    $tag->Actions(SWF::Builder::ActionScript->new);
+    my $action = SWF::Builder::ActionScript->new(Version => $self->{_root}{_version});
+    $tag->Actions($action->{_actions});
+    return $action;
 }
 
 sub frame_label {
@@ -310,13 +313,15 @@ use base qw/ SWF::Builder::Movie /;
 
 sub new {
     my $class = shift;
-
+    my %param = @_;
     my $self = $class->SUPER::new;
+
     $self->{_root} = $self;
     $self->{_character_IDs} = [];
     $self->{_ID_seed} = 1;
     $self->{_target_path} = '_root';
     $self->{_to_destroy} = [];
+    $self->{_version} = $param{Version};
     $self;
 }
 
@@ -430,7 +435,7 @@ and other methods for movie. See the next section for details.
 
 =over 4
 
-=item $movie = SWF::Builder->new( [FrameRate => $rate, FrameSize => [$xmin, $ymin, $xmax, $ymax], BackgroundColor => $color] )
+=item $movie = SWF::Builder->new( [FrameRate => $rate, FrameSize => [$xmin, $ymin, $xmax, $ymax], BackgroundColor => $color, Version => $version] )
 
 creates a new '_root' movie. It can take three optional named parameters.
 FrameRate is a frame count per second. FrameSize is a box size of frames,
@@ -439,6 +444,7 @@ of the box in pixels.
 BackgroundColor is a background color of the movie. It can take a six-figure
 hexadecimal string, an array reference of R, G, and B value, an array reference
 of named parameters such as [Red => 255], and SWF::Element::RGB object.
+Version is a version number of the SWF. It must be 6 and above.
 
 =item $movie->FrameRate( $rate )
 
