@@ -1,31 +1,19 @@
-package SWF::Builder::Bitmap;
+package SWF::Builder::Character::Bitmap;
 
 use strict;
 use bytes;
 
 use Carp;
 use SWF::Element;
-use SWF::Builder::Shape;
+use SWF::Builder::Character;
+use SWF::Builder::Character::Shape;
 
-our $VERSION="0.02";
+our $VERSION="0.03";
 
-@SWF::Builder::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
+@SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
 sub matrix {
   SWF::Element::MATRIX->new->scale(20);
-}
-
-sub width {
-    shift->{_width};
-}
-
-sub height {
-    shift->{_height};
-}
-
-sub get_bbox {
-    my $self = shift;
-    return (0, 0, $self->{_width}, $self->{_height});
 }
 
 sub place {
@@ -40,18 +28,43 @@ sub place {
     $self->{_shapetag}->place(@_);
 }
 
-package SWF::Builder::Bitmap::JPEG;
+####
+
+@SWF::Builder::Character::Bitmap::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Bitmap /;
+
+####
+
+package SWF::Builder::Character::Bitmap::Def;
+
+@SWF::Builder::Character::Bitmap::Def::ISA = qw/ SWF::Builder::Character::Bitmap /;
+
+sub width {
+    shift->{_width};
+}
+
+sub height {
+    shift->{_height};
+}
+
+sub get_bbox {
+    my $self = shift;
+    return (0, 0, $self->{_width}, $self->{_height});
+}
+
+####
+
+package SWF::Builder::Character::Bitmap::JPEG;
 
 use Compress::Zlib;
 use Carp;
 
-@SWF::Builder::Bitmap::JPEG::ISA = qw/ SWF::Builder::Bitmap /;
+@SWF::Builder::Character::Bitmap::JPEG::ISA = qw/ SWF::Builder::character::Bitmap::Def /;
 
 sub new {
     my ($class, %param) = @_;
 
     my $self = bless { _is_alpha => 0 }, $class;
-    $self->SWF::Builder::Character::Displayable::_init;
+    $self->_init_character;
     $self->JPEGData($param{JPEGData}) if $param{JPEGData};
     $self->AlphaData($param{AlphaData}) if $param{AlphaData};
     $self->load_jpeg($param{JPEGFile}) if $param{JPEGFile};
@@ -142,11 +155,9 @@ sub load_alpha {
     $self;
 }
 
-sub pack {
+sub _pack {
     my ($self, $stream) = @_;
     my $tag;
-
-    $self->prepare_to_pack($stream) or return;
 
     if ($self->{_alphadata} or $self->{_alphafile}) {
 	$tag = SWF::Element::Tag::DefineBitsJPEG3->new
@@ -182,31 +193,29 @@ sub pack {
 
 ####
 
-package SWF::Builder::Bitmap::Lossless;
+package SWF::Builder::Character::Bitmap::Lossless;
 
 use Carp;
 use Compress::Zlib;
 
-@SWF::Builder::Bitmap::Lossless::ISA = qw/ SWF::Builder::Bitmap /;
+@SWF::Builder::Character::Bitmap::Lossless::ISA = qw/ SWF::Builder::Character::Bitmap::Def /;
 
 sub new {
     my ($class, $type, $obj) = @_;
 
-    my $package = "SWF::Builder::Bitmap::Lossless::$type";
+    my $package = "SWF::Builder::Character::Bitmap::Lossless::$type";
     eval "require $package";
     if ($@) {
 	croak "Bitmap type '$type' is not supported" if $@=~/^Can\'t locate/;
 	die $@;
     }
     my $self = $package->new($obj);
-    $self->SWF::Builder::Character::Displayable::_init;
+    $self->_init_character;
     $self;
 }
 
-sub pack {
+sub _pack {
     my ($self, $stream) = @_;
-
-    $self->prepare_to_pack($stream) or return;
 
     my ($width, $height) = @$self{qw/ _width _height /};
     my $tag = $self->{_is_alpha} ?

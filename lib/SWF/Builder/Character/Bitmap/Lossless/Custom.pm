@@ -1,8 +1,9 @@
-package SWF::Builder::Bitmap::Lossless::Custom;
+package SWF::Builder::Character::Bitmap::Lossless::Custom;
 
 use strict;
 
-our @ISA = ('SWF::Builder::Bitmap::Lossless');
+our @ISA = ('SWF::Builder::Character::Bitmap::Lossless');
+our $VERSION = '0.011';
 
 sub new {
     my ($class, $obj) = @_;
@@ -12,4 +13,6 @@ sub new {
 
     bless \%self, $class;
 }
+
+1;
 

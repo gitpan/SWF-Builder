@@ -1,24 +1,39 @@
-package SWF::Builder::Font;
+package SWF::Builder::Character::Font;
 
 use strict;
 use utf8;
 
-use Carp;
-use SWF::Element;
-use SWF::Builder;
-use SWF::Builder::ExElement;
-use SWF::Builder::Shape;
-use Font::TTF::Font;
-use Font::TTF::Ttc;
-
-our $VERSION="0.03";
+our $VERSION="0.04";
 
 our %indirect;
 
 @indirect{ ('_sans', '_serif', '_typewriter', "_\x{30b4}\x{30b7}\x{30c3}\x{30af}", "_\x{660e}\x{671d}", "_\x{7b49}\x{5e45}") }
         = ('_sans', '_serif', '_typewriter', "_\x{30b4}\x{30b7}\x{30c3}\x{30af}", "_\x{660e}\x{671d}", "_\x{7b49}\x{5e45}");
 
-@SWF::Builder::Font::ISA = qw/ SWF::Builder::Character /;
+@SWF::Builder::Character::Font::ISA = qw/ SWF::Builder::Character /;
+
+####
+
+package SWF::Builder::Character::Font::Imported;
+
+@SWF::Builder::Character::Font::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Font /;
+
+sub embed {1}  # ??
+sub add_glyph{}
+
+####
+
+package SWF::Builder::Character::Font::Def;
+
+use Carp;
+use SWF::Element;
+use SWF::Builder;
+use SWF::Builder::ExElement;
+use SWF::Builder::Character::Shape;
+use Font::TTF::Font;
+use Font::TTF::Ttc;
+
+@SWF::Builder::Character::Font::Def::ISA = qw/ SWF::Builder::Character::Font /;
 
 sub new {
     my ($class, $fontfile, $fontname) = @_;
@@ -34,7 +49,7 @@ sub new {
 	_ttf_tables => ($ttft = bless {}, 'SWF::Builder::Font::TTFTables'),
     }, $class;
 
-    $self->SWF::Builder::Character::_init;
+    $self->_init_character;
     $tag->FontID($self->{ID});
 
     my $font = $indirect{$fontfile} ||
@@ -72,24 +87,24 @@ sub new {
 
       EMBED:
 	{
+	    $name = $font->{name}||$p_font->{name} # font name
+	        or croak 'Invalid font';
 	    if ($os2 = $font->{'OS/2'}||$p_font->{'OS/2'}) {  # get OS/2 table to check the lisence.
 		$os2->read;
 		my $fstype = $os2->{fsType};
 
 		if ($fstype & 0x302) {
-		    carp "Embedding outlines of the font '$fontfile' is not permitted";
+		    warn "Embedding outlines of the font '$fontfile' is not permitted.\n";
 		    $self->{_embed} = 0;
 		    last EMBED;
 		} elsif ($fstype & 4) {
-		    carp "The font '$fontfile' can use only for 'Preview & Print'";
+		    warn "The font '$fontfile' can use only for 'Preview & Print'.\n";
 		    $self->{_read_only} = 1;
 		}
 	    } else {
-		carp "The font '$fontfile' doesn't have any lisence information. See the lisence of the font.";
+		warn "The font '$fontfile' doesn't have any lisence information. See the lisence of the font.\n";
 	    }
 	    $head = $font->{head}||$p_font->{head} # header
-	        or croak 'Invalid font';
-	    $name = $font->{name}||$p_font->{name} # font name
 	        or croak 'Invalid font';
 	    $hhea = $font->{hhea}||$p_font->{hhea} # horizontal header
 	        or croak 'Invalid font';
@@ -192,7 +207,8 @@ sub kern {
 }
 
 sub add_glyph {
-    my ($self, $string) = @_;
+    my ($self, $string, $e_char) = @_;
+    my @chars;
 
     return unless $self->{_embed};
 
@@ -203,13 +219,19 @@ sub add_glyph {
     my $scale = $self->{_scale};
     my $tag = $self->{_tag};
 
-    for my $c (split //, $string) {
+    if (defined $e_char) {
+	@chars = map {chr} (ord($string) .. ord($e_char));
+    } else {
+	@chars = split //, $string;
+    }
+
+    for my $c (@chars) {
 	next if $hash->{$c};
 
 	my $code = ord($c);
 	my $gid = $cmap->{$code};
 	my $adv = $advances->[$gid] * $scale/20;    # twips->pixel
-	my $gshape = SWF::Builder::Font::Glyph->new;
+	my $gshape = SWF::Builder::Character::Font::Glyph->new;
 	my $glyph = $glyphs->[$gid];
 	if (defined $glyph) {
 	    $glyph->read_dat;
@@ -278,9 +300,9 @@ sub LanguageCode {
     $self->{_tag}->LanguageCode($code);
 }
 
-our $AUTOLOAD;
 sub AUTOLOAD {
-    my $self = shift;
+    my $self = shift; 
+    our $AUTOLOAD;
     my ($sub) = $AUTOLOAD=~/::([^:]+)$/;
     return if $sub eq 'DESTROY';
     my $tag = $self->{_tag};
@@ -296,10 +318,8 @@ sub AUTOLOAD {
 
 my $emprect = SWF::Element::RECT->new(Xmin => 0, Ymin => 0, Xmax => 0, Ymax => 0);
 
-sub pack {
+sub _pack {
     my ($self, $stream) = @_;
-
-    $self->prepare_to_pack($stream) or return;
 
     my $tag = $self->{_tag};
     my $hash = $self->{_glyph_hash};
@@ -335,9 +355,9 @@ sub _destroy {
 
 ####
 
-package SWF::Builder::Font::Glyph;
+package SWF::Builder::Character::Font::Glyph;
 
-@SWF::Builder::Font::Glyph::ISA = ('SWF::Builder::Shape');
+@SWF::Builder::Character::Font::Glyph::ISA = ('SWF::Builder::Shape');
 
 sub new {
     my $class = shift;
@@ -386,19 +406,23 @@ If the flag is set, the font cannot be used for text field.
 
 gets the average character width.
 
-=item $font->add_glyph( $char_string )
+=item $font->add_glyph( $char_string [, $e_char] )
 
 adds glyph data of the characters of the string to the font.
-Usually, L<SWF::Builder::Text> adds required glyph data automatically.
+Usually, L<SWF::Builder::character::Text> adds required glyph
+data automatically.
 It is necessary to do add_glyph if the font is used for a dynamic text 
 or a text field which will be changed at playing time. 
+if $e_char is present, add_glyph adds glyphs of characters from 
+first character of $char_string to first character of $e_char. 
+For example, $font->add_glyph('a', 'z') adds glyphs of all lower case alphabet.
 
 =item $font->LanguageCode( $code )
 
 sets the spoken language of texts to which the font is applied.
 $code can take 'none', 'Latin', 'Japanese', 'Korean', 'Simplified Chinese', and
 'Traditional Chinese'. It can also take a number, 0, 1, 2, 3, 4, and 5,
-or an initial, 'n', 'J', 'K', 'S'(or 'C'), and 'T', respectively.
+or an initial, 'n', 'L', 'J', 'K', 'S'(or 'C'), and 'T', respectively.
 
 =back
 

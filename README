@@ -1,18 +1,21 @@
 SWF::Builder - creates FLASH(R) movie (SWF) files.
 This package contains:
 
-  SWF::Builder               - Main module.
-  SWF::Builder::ActionScript - SWF ActionScript object.
+  SWF::Builder                   - Main module.
+  SWF::Builder::ActionScript     - SWF ActionScript object.
   SWF::Builder::ActionScript::Compiler
-                             - SWF ActionScript compiler.
-  SWF::Builder::Bitmap       - SWF Bitmap object.
+                                 - SWF ActionScript compiler.
+  SWF::Character                 - SWF character, frame, and display instance.
+  SWF::Builder::Character::Bitmap
+                                 - SWF Bitmap object.
   SWF::Builder::Bitmap::Lossless::*
-                             - Drivers for SWF Bitmap object.
-  SWF::Builder::Font         - SWF font object.
-  SWF::Builder::Gradient     - SWF gradient object.
-  SWF::Builder::MovieClip    - SWF movie clip object.
-  SWF::Builder::Shape        - SWF shape object.
-  SWF::Builder::Text         - SWF static text object.
+                                 - Drivers for SWF Bitmap object.
+  SWF::Builder::Character::Font  - SWF font object.
+  SWF::Builder::Character::MovieClip
+                                 - SWF movie clip object.
+  SWF::Builder::Character::Shape - SWF shape object.
+  SWF::Builder::Character::Text  - SWF static text object.
+  SWF::Builder::Gradient         - SWF gradient object.
   SWF::Builder::ExElement
 
 See each POD for further information.
@@ -37,12 +40,19 @@ SCRIPTS
 
 Following scripts and SWF movie are included in this archive.
 
- asc.plx  - ActionScript compiler
- mctest.plx  - Sample script
- tracewindow.swf 
-           - Debug window movie.
-             It displays results of trace actions compiled with "Trace=>'lcwin'".
-
+ asc.plx      - ActionScript compiler.
+ mctest.plx   - Sample script.
+ tracewindow.plx
+              - Debug window movie. It displays results of trace actions
+                compiled with "Trace=>'lcwin'".
+ masktest.plx - Sample script of mask.
+ flowmes.plx  - Creates flow-in-message movie.
+                It is necessary to change font path for other than Windows.
+ fields.plx   - Sample of text fields.
+ htmltest.plx - Sample of HTML texts.
+                It is necessary to change font for other than Windows.
+ exportasset.plx & importasset.plx
+              - Sample of export and import assets.
 
 COPYRIGHT
     Copyright 2000-2003, Yasuhiro Sasama (ySas), <ysas@nmt.ne.jp>

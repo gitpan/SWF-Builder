@@ -6,11 +6,18 @@ use SWF::Element;
 
 require Exporter;
 
-our $VERSION="0.02";
+our $VERSION="0.03";
 @SWF::Builder::ExElement::ISA = ('Exporter');
 
-our @EXPORT = ('utf2bin');
+our @EXPORT = ('utf2bin', '_round');
 *utf2bin = ($]>=5.008) ? \&utf8::encode : sub{};
+
+sub _round {
+    my $a=shift;
+    
+    $a||=0;
+    return int($a+0.5*($a<=>0));
+}
 
 package SWF::Builder::ExElement::Color;
 
@@ -87,8 +94,10 @@ sub _add_color {
     return SWF::Builder::ExElement::Color->new(%param, is_alpha => $self->{_is_alpha});
 }
 
-sub _init {
-    shift->{_is_alpha} = SWF::Element::Scalar->new(0);
+sub _init_is_alpha {
+    my ($self, $f) = @_;
+    $f ||= 0;
+    $self->{_is_alpha} = SWF::Element::Scalar->new($f);
 }
 
 ####

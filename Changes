@@ -1,5 +1,15 @@
 Revision history for Perl extension SWF::Builder.
 
+0.05 Sat Jul 10 23:24:25 2004
+	- Changeed some module pathes.
+	- Support dynamic texts.
+	- Support export and import assets.
+	- Support init actions for movie clips.
+	- Support mask.
+	- Support drawing text in the shape objects.
+	- $font->add_glyph can take start and end characters.
+	- Fixed to handle fullcolor GD objects.
+
 0.04 Sat Mar 13 20:00:00 2004
 	- UTF8 flag is properly cleared now.
  	- Fixed wrong calculation of a shape boundary box.

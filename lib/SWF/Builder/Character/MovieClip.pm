@@ -1,4 +1,4 @@
-package SWF::Builder::MovieClip;
+package SWF::Builder::Character::MovieClip;
 
 use strict;
 use utf8;
@@ -7,31 +7,56 @@ use Carp;
 use SWF::Element;
 use SWF::Builder;
 
-@SWF::Builder::MovieClip::ISA = qw/ SWF::Builder::Movie SWF::Builder::Character::Displayable /;
+use Carp;
 
-sub new {
-    my $self = shift->SUPER::new;
-    $self->SWF::Builder::Character::Displayable::_init;
-    $self;
-}
+our $VERSION='0.03';
+
+@SWF::Builder::Character::MovieClip::ISA = ('SWF::Builder::Character::Displayable');
 
 sub place {
     my $self = shift;
 
-    bless $self->SUPER::place(@_), 'SWF::Builder::MovieClip::DisplayInstance';
+    bless $self->SUPER::place(@_), 'SWF::Builder::DisplayInstance::MovieClip';
 }
 
-sub pack {
+####
+
+@SWF::Builder::Character::MovieClip::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::MovieClip /;
+
+####
+
+package SWF::Builder::Character::MovieClip::Def;
+
+@SWF::Builder::Character::MovieClip::Def::ISA = qw/ SWF::Builder::Movie SWF::Builder::Character::MovieClip /;
+
+sub new {
+    my $self = shift->SUPER::new;
+    $self->{_init_action} = undef;
+    $self->_init_character;
+    $self;
+}
+
+sub _pack {
     my ($self, $stream) = @_;
 
-    $self->prepare_to_pack($stream) or return;
     $self->set_depth;
   SWF::Builder::DefineSprite->new
       ( SpriteID    => $self->{ID},
 	FrameCount  => scalar(@{$self->{_frame_list}}),
 	ControlTags => $self->{_frame_list}
 	)->pack($stream);
+    if ($self->{_init_action}) {
+	my $tag = SWF::Element::Tag::DoInitAction->new;
+	$tag->SpriteID($self->{ID});
+	$tag->Actions($self->{_init_action});
+	$tag->pack($stream);
+    }
+}
 
+sub init_action {
+    require SWF::Builder::ActionScript;
+
+    shift->{_init_action} = SWF::Builder::ActionScript->new;
 }
 
 sub _destroy {
@@ -51,11 +76,11 @@ sub SWF::Builder::DefineSprite::_pack {
 
 #####
 
-package SWF::Builder::MovieClip::DisplayInstance;
+package SWF::Builder::DisplayInstance::MovieClip;
 
 use Carp;
 
-@SWF::Builder::MovieClip::DisplayInstance::ISA = qw/ SWF::Builder::DisplayInstance /;
+@SWF::Builder::DisplayInstance::MovieClip::ISA = qw/ SWF::Builder::DisplayInstance /;
 
 my %special_keys = (
 		    '<Left>'      => 1,
@@ -91,6 +116,8 @@ sub on {
 }
 
 *onClipEvent = \&on;
+
+#####
 
 1;
 __END__
@@ -129,6 +156,10 @@ returns a new movie clip.
 =item $mc->new_XXX
 
 Character constructors. See L<SWF::Builder>.
+
+=item $as = $mc->init_action
+
+returns SWF::Builder::ActionScript object to initialize the movie clip.
 
 =item $mc_i = $mc->place( ... )
 

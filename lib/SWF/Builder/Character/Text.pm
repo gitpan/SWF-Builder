@@ -1,16 +1,25 @@
-package SWF::Builder::Text;
+package SWF::Builder::Character::Text;
 
 use strict;
 use utf8;
 
+our $VERSION="0.03";
+
+@SWF::Builder::Character::Text::ISA = qw/ SWF::Builder::Character::UsableAsMask /;
+@SWF::Builder::Character::Text::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Text /;
+@SWF::Builder::Character::StaticText::Imported::ISA = qw/ SWF::Builder::Character::Text::Imported /;
+
+####
+
+package SWF::Builder::Character::Text::Def;
+
 use Carp;
 use SWF::Element;
-use SWF::Builder::Font;
+use SWF::Builder::Character;
+use SWF::Builder::Character::Font;
 use SWF::Builder::ExElement;
 
-our $VERSION="0.02";
-
-@SWF::Builder::Text::ISA = qw/ SWF::Builder::Character::Displayable SWF::Builder::ExElement::Color::AddColor/;
+@SWF::Builder::Character::Text::Def::ISA = qw/ SWF::Builder::Character::Text SWF::Builder::ExElement::Color::AddColor/;
 
 sub new {
     my ($class, $font, $text) = @_;
@@ -32,8 +41,8 @@ sub new {
 	_nl_X         => 0,
 	_nlbounds     => SWF::Builder::ExElement::BoundaryRect->new,
     }, $class;
-    $self->SWF::Builder::Character::Displayable::_init;
-    $self->SWF::Builder::ExElement::Color::AddColor::_init;
+    $self->_init_character;
+    $self->_init_is_alpha;
     
     $self->font($font) if defined $font;
     $self->text($text) if defined $text;
@@ -56,7 +65,7 @@ sub _get_type1 {
 sub font {
     my ($self, $font) = @_;
     return if $font eq $self->{_current_font};
-    croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Font');
+    croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Character::Font');
     croak "The font applied to the static text needs to embed glyph data" unless $font->embed;
     my $r = $self->_get_type1;
     my $size = $self->{_current_size};
@@ -220,11 +229,10 @@ sub get_bbox {
     return map{$_/20} @{$self->{_bounds}};
 }
 
-sub pack {
+sub _pack {
     my ($self, $stream) = @_;
     
     $self->_line_adjust if $self->{_nl};
-    $self->prepare_to_pack($stream) or return;
     
     my $x = $self->{_current_X} = 0;
     my $y = $self->{_current_Y} = 0;

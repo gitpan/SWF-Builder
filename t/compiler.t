@@ -23,7 +23,7 @@ if ($BE) {
 my $INFINITY = unpack('d', $INF);
 ok($INFINITY+1, $INFINITY);
 ok(pack('d', -$INFINITY), $NINF);
-ok(pack('d', $INFINITY-$INFINITY), $IND);
+ok(pack('d', $INFINITY-$INFINITY) eq $IND or pack('d', $INFINITY-$INFINITY) eq $NAN);
 
 my $c;
 my $actions;
@@ -50,5 +50,5 @@ sub actionchk {
     $action1->dumper(sub{$a1dump.=shift});
     $action2->dumper(sub{$a2dump.=shift});
 
-    ok($a1dump, $a2dump);
+    ok($a2dump, $a1dump);
 }

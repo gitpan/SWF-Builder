@@ -5,9 +5,11 @@ use strict;
 use SWF::File;
 use SWF::Element;
 use SWF::Builder::ExElement;
+use SWF::Builder::Character;
+
 use Carp;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 @SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');
@@ -26,7 +28,7 @@ sub new {
 	_root =>
 	  SWF::Builder::Movie::Root->new,
     }, $class;
-    $self->SWF::Builder::ExElement::Color::AddColor::_init;
+    $self->_init_is_alpha;
     $self;
 
 }
@@ -45,6 +47,11 @@ sub BackgroundColor {
     my ($self, $color) = @_;
     $self->{_backgroundcolor} = $color if defined $color;
     $self->{_backgroundcolor};
+}
+
+sub compress {
+    my $self = shift;
+    $self->{_file}->compress(@_);
 }
 
 sub save {
@@ -69,7 +76,8 @@ sub AUTOLOAD {
 
 
 sub DESTROY {
-    shift->{_root}->_destroy;
+    my $r = shift->{_root};
+    $r->_destroy if defined $r;
 }
 
 ####
@@ -90,6 +98,13 @@ sub new {
     return $self;
 }
 
+sub set_depth {
+    my ($self, $n) = @_;
+
+    $self->{_depth}->configure($n);
+    $n+1;
+}
+
 sub _destroy {
     my $self = shift;
     while(my $lower = $self->{_lower}) {
@@ -98,257 +113,6 @@ sub _destroy {
     }
 }
 
-####
-
-package SWF::Builder::Character;
-use Carp;
-
-sub _init {
-    my $self = shift;
-
-    $self->{ID} = SWF::Element::ID->new;
-    $self->{_depends} = {};
-    $self->{_parent} = undef;
-    $self->{_root} = undef;
-}
-
-sub prepare_to_pack {
-    my ($self, $stream) = @_;
-
-    return if $self->{ID}->defined;
-    for my $dep (values %{$self->{_depends}}) {
-	$dep->pack($stream) unless $dep->{ID}->defined;
-    }
-
-    if ($self->{_root}) {
-	$self->{ID}->configure($self->{_root}->get_ID);
-    } else {
-	croak "Character ID need to be initialized to pack" unless $self->{ID}->defined;
-    }
-    1;
-}
-
-sub _depends {
-    my ($self, $char) = @_;
-
-    $self->{_depends}{$char} = $char;
-}
-
-sub _destroy {
-    %{+shift} = ();
-}
-
-####
-
-package SWF::Builder::Character::Displayable;
-@SWF::Builder::Character::Displayable::ISA = qw/SWF::Builder::Character/;
-
-use Carp;
-
-sub _search_sibling {
-    my ($parent, $ref) = @_;
-    my $p;
-
-    while(exists $ref->{_parent}) {
-	$p = $ref->{_parent};
-	return $ref if $p eq $parent;
-	$ref = $p;
-    }
-    return undef;
-}
-
-sub place {
-    my ($self, %param) = @_;
-
-    while(my $k = shift) {
-	$param{lc $k} = shift;
-    }
-
-    my $parent = $param{MovieClip} || $param{MC} || $self->{_parent} or croak "Can't get the movieclip to place";
-    if ($parent eq '_root') {
-	$parent = $self->{_root};
-    } elsif (ref($parent) eq 'SWF::Builder') {
-	$parent = $parent->{_root};
-    }
-    croak "The item can be placed only on the movie which defines it" if $parent->{_root} != $self->{_root};
-
-
-    my $depth;
-
-    if (exists $param{below}) {
-	my $refitem = _search_sibling($parent, $param{below}) or croak "Can't place the item below what on the different movieclip";
-	$depth = SWF::Builder::Depth->new($parent, $refitem->{_depth}{_lower});
-    } elsif (exists $param{above}) {
-	my $refitem = _search_sibling($parent, $param{below}) or croak "Can't place the item above what on the different movieclip";
-	$depth = SWF::Builder::Depth->new($parent, $refitem->{_depth});
-    } else {
-	$depth = SWF::Builder::Depth->new($parent, $parent->{_depth_list}{_lower});
-    }
-
-    my $frame = $param{Frame} || 1;
-
-    $parent->_depends($self, $frame);
-
-    my $disp_i = 
-	bless {
-	    _parent        => $parent,
-	    _root          => $self->{_root},
-	    _first_frame   => $frame,
-	    _last_frame_offset
-		           => 2**64,
-	    _current_frame => $frame,
-	    _depth         => $depth,
-	    _obj           => $self,
-	    _tags          => [],
-	}, 'SWF::Builder::DisplayInstance';
-
-    push @{$self->{_root}{_to_destroy}}, $disp_i;
-    $disp_i->frame($frame);
-    $disp_i->{_current_frame} = $frame;
-    $disp_i;
-}
-
-####
-
-package SWF::Builder::DisplayInstance;
-
-use Carp;
-
-sub frame {
-    my ($self, $frame) = @_;
-    my $frametag;
-
-    my $frame_offset = $frame - $self->{_first_frame};
-
-    unless (defined($self->{_tags}[$frame_offset])) {
-	croak "The frame $frame is out of range" if $frame_offset < 0 or $frame_offset >= $self->{_last_frame_offset};
-	$frametag = bless {
-	    _parent => $self,
-	    _frame_offset => $frame_offset,
-	    _tag => 
-	      SWF::Element::Tag::PlaceObject2->new
-		  ( Depth => $self->{_depth}{_depth} ),
-	      }, 'SWF::Builder::DisplayInstance::Frame';
-	$self->{_tags}[$frame_offset] = $frametag;
-	push @{$self->{_parent}{_frame_list}[$frame-1]}, $frametag;	
-	if ($frame_offset == 0) {
-	    $frametag->{_tag}->CharacterID($self->{_obj}{ID});
-	} else {
-	    $frametag->{_tag}->PlaceFlagMove(1);
-	}
-    } else {
-	$frametag = $self->{_tags}[$frame_offset];
-    }
-    $self->{_current_frame} = $frame+1;
-    $frametag;
-}
-
-sub name {
-    my ($self, $name) = @_;
-    my $tag = $self->{_tags}[0]{_tag};
-    $tag->Name($name) if @_>1;
-    $tag->Name;
-}
-
-sub AUTOLOAD {
-    my $self = shift;
-    my ($name, $class);
-    my $sub = $SWF::Builder::DisplayInstance::AUTOLOAD;
-
-    return if $sub =~/::DESTROY$/;
-    $sub =~ s/.+:://;
-    croak "Can't locate object method \"$sub\" via package \"".ref($self).'" (perhaps you forgot to load "'.ref($self).'"?)' unless SWF::Builder::DisplayInstance::Frame->can($sub);
-    $self->frame($self->{_current_frame})->$sub(@_);
-}
-
-sub _destroy {
-    %{+shift} = ();
-}
-####
-
-package SWF::Builder::DisplayInstance::Frame;
-
-use Carp;
-
-sub scale {
-    my $self = shift;
-
-    $self->matrix->scale(@_);
-    $self;
-}
-
-sub moveto {
-    my $self = shift;
-    $self->matrix->moveto($_[0]*20, $_[1]*20);
-    $self;
-}
-
-sub r_moveto {
-    my ($self, $to_rx, $to_ry) = @_;
-
-    my $m = $self->matrix;
-    $m->moveto($m->TranslateX + $to_rx*20, $m->TranslateY + $to_ry*20);
-    $self;
-}
-
-sub rotate {
-    my ($self, $r) = @_;
-
-    $self->matrix->rotate($r);
-    $self;
-}
-
-sub reset {
-    my $self = shift;
-    my $m = $self->matrix;
-    $m->ScaleX(1);
-    $m->ScaleY(1);
-    $m->RotateSkew0(0);
-    $m->RotateSkew1(0);
-    $self;
-}
-
-sub remove {
-    my $self = shift;
-    my $parent = $self->{_parent};
-
-    croak "This DisplayInstance has already set to remove " if ($parent->{_last_frame_offset} < 2**64);
-
-    $self->{_tag} = SWF::Element::Tag::RemoveObject2->new( Depth => $parent->{_depth}{_depth} );
-    $parent->{_last_frame_offset} = $self->{_frame_offset};
-    $self;
-}
-
-sub frame_action {
-    my $self = shift;
-
-    $self->{_parent}{_parent}->frame_action($self->{_parent}{_first_frame}+$self->{_frame_offset});
-}
-
-sub frame_label {
-    my $self = shift;
-
-    $self->{_parent}{_parent}->frame_label($self->{_parent}{_first_frame}+$self->{_frame_offset}, @_);
-}
-
-sub matrix {
-    my $self = shift;
-    my $tag = $self->{_tag};
-
-    unless ($tag->Matrix->defined) {
-	my $ptags = $self->{_parent}{_tags};
-	my $frame_offset = $self->{_frame_offset};
-	$frame_offset-- until ($frame_offset == 0 or defined $ptags->[$frame_offset] and $ptags->[$frame_offset]{_tag}->Matrix->defined);
-	$tag->Matrix($ptags->[$frame_offset]{_tag}->Matrix->clone);
-    }
-    $tag->Matrix;
-}
-
-sub pack {
-    my ($self, $stream) = @_;
-
-    $self->{_tag}->pack($stream);
-}
 
 ####
 
@@ -371,7 +135,9 @@ sub pack {
 ####
 
 package SWF::Builder::Movie;
+
 use Carp;
+use SWF::Builder::ExElement;
 
 sub new {
     my $class = shift;
@@ -379,33 +145,74 @@ sub new {
     my $self = bless {
 	_frame_list => SWF::Builder::_FrameList->new,
     }, $class;
-    $self->{_depth_list} = SWF::Builder::Depth->new($self, $self->{_depth_list});
+    $self->{_depth_list} = SWF::Builder::Depth->new($self);
 
     $self;
 }
 
 sub new_shape {
-    require SWF::Builder::Shape;
+    require SWF::Builder::Character::Shape;
 
-    shift->_new_character(SWF::Builder::Shape::DefineShape->new);
+    shift->_new_character(SWF::Builder::Character::Shape::Def->new);
 }
 
 sub new_static_text {
-    require SWF::Builder::Text;
+    require SWF::Builder::Character::Text;
 
-    shift->_new_character(SWF::Builder::Text->new(@_));
+    shift->_new_character(SWF::Builder::Character::Text::Def->new(@_));
+}
+
+*new_text = \&new_static_text;
+
+sub new_dynamic_text {
+    require SWF::Builder::Character::EditText;
+    my $s =shift;
+my $q = SWF::Builder::Character::DynamicText->new(@_);
+    $s->_new_character($q);
+}
+
+
+sub new_edit_text {
+    require SWF::Builder::Character::EditText;
+
+    shift->_new_character(SWF::Builder::Character::EditText::Def->new(@_));
+}
+
+
+sub new_html_text {
+    require SWF::Builder::Character::EditText;
+
+    shift->_new_character(SWF::Builder::Character::HTMLText->new(@_));
+}
+
+sub new_text_area {
+    require SWF::Builder::Character::EditText;
+
+    shift->_new_character(SWF::Builder::Character::TextArea->new(@_));
+}
+
+sub new_input_field {
+    require SWF::Builder::Character::EditText;
+
+    shift->_new_character(SWF::Builder::Character::InputField->new(@_));
+}
+
+sub new_password_field {
+    require SWF::Builder::Character::EditText;
+
+    shift->_new_character(SWF::Builder::Character::PasswordField->new(@_));
 }
 
 sub new_font {
-    require SWF::Builder::Font;
+    require SWF::Builder::Character::Font;
 
-    shift->_new_character(SWF::Builder::Font->new(@_));
+    shift->_new_character(SWF::Builder::Character::Font::Def->new(@_));
 }
 
 sub new_movie_clip {
-    require SWF::Builder::MovieClip;
+    require SWF::Builder::Character::MovieClip;
 
-    shift->_new_character(SWF::Builder::MovieClip->new);
+    shift->_new_character(SWF::Builder::Character::MovieClip::Def->new);
 }
 
 *new_mc = \&new_movie_clip;
@@ -417,22 +224,35 @@ sub new_gradient {
 }
 
 sub new_jpeg {
-    require SWF::Builder::Bitmap;
+    require SWF::Builder::Character::Bitmap;
 
     my $self = shift;
 
     unshift @_, 'JPEGFile' if @_==1;
-    $self->_new_character(SWF::Builder::Bitmap::JPEG->new(@_));
+    $self->_new_character(SWF::Builder::Character::Bitmap::JPEG->new(@_));
 }
 
 sub new_bitmap {
-    require SWF::Builder::Bitmap;
+    require SWF::Builder::Character::Bitmap;
 
     my $self = shift;
 
-    $self->_new_character(SWF::Builder::Bitmap::Lossless->new(@_));
+    $self->_new_character(SWF::Builder::Character::Bitmap::Lossless->new(@_));
 }
 
+sub import_asset {
+    my $self = shift;
+
+    $self->_new_character(SWF::Builder::Character::Imported->new(@_));
+}
+
+#sub shape_tween {
+#    require SWF::Builder::Character::MorphShape;
+#
+#    my $self = shift;
+#
+#    $self->_new_character(SWF::Builder::Character::MorphShape->shape_tween(@_));
+#}
 
 sub _new_character {
     my ($parent, $self) = @_;
@@ -444,6 +264,7 @@ sub _new_character {
 
     return $self;
 }
+
 
 sub frame_action {
     require SWF::Builder::ActionScript;
@@ -458,16 +279,17 @@ sub frame_action {
 sub frame_label {
     my ($self, $frame, $label, $anchor) = @_;
 
+    utf2bin($label);
     push @{$self->{_frame_list}[$frame-1]}, SWF::Element::Tag::FrameLabel->new(Name => $label, NamedAnchorFlag => $anchor);
 }
 
 
 sub set_depth {
-    my $self= shift;
+    my $self = shift;
     my $n = 1;
     my $depth = $self->{_depth_list}{_upper};
     while ($depth != $self->{_depth_list}) {
-	$depth->{_depth}->configure($n++);
+	$n = $depth->set_depth($n);
 	$depth = $depth->{_upper};
     }
 }
@@ -496,10 +318,6 @@ sub new {
     $self->{_target_path} = '_root';
     $self->{_to_destroy} = [];
     $self;
-}
-
-sub get_ID {
-    shift->{_ID_seed}++;
 }
 
 sub pack {
@@ -588,7 +406,7 @@ by $movie->new_XXX methods.
 
 =item 3.
 
-get an instance of the character by $character->place.
+get a display instance of the character by $char->place.
 
 =item 4.
 
@@ -638,48 +456,72 @@ saves the movie.
 
 =head2 Character constructors
 
-All characters must be defined before it uses.
-
 =over 4
 
 =item $mc->new_shape
 
-returns a new shape.
-See L<SWF::Builder::shape> for the detail.
+returns a new shape (type: Shape).
+See L<SWF::Builder::Character::Shape> for the detail.
 
 =item $mc->new_font( $fontfile [, $fontname] )
 
-returns a new font.
+returns a new font (type: Font).
 $fontfile is a font file name. It should be a TrueType font file (ttf/ttc).
 Optional $fontname is a font name referred by HTMLs in dynamic texts.
 It is taken from the TrueType file if not defined.
-See L<SWF::Builder::Font> for the detail.
+See L<SWF::Builder::Character::Font> for the detail.
 
 =item $mc->new_static_text( [$font, $text] )
 
-returns a new static text, which is fixed by authoring and cannot
+returns a new static text (type: Text), which is fixed by authoring and cannot
 be changed at playing time.
-See L<SWF::Builder::Text> for the detail of a text.
+See L<SWF::Builder::Character::Text> for the detail of a text.
+
+=item $mc->new_edit_text( [$font, $text] )
+
+=item $mc->new_dynamic_text( [$font, $text] )
+
+=item $mc->new_html_text( [$html] )
+
+=item $mc->new_text_area( $width, $height )
+
+=item $mc->new_input_field( [$length] )
+
+=item $mc->new_password_field( [$length] )
+
+return new dynamic editable text variations (type: EditText).
+See L<SWF::Builder::Character::EditText> for the detail.
 
 =item $mc->new_movie_clip
 
 =item $mc->new_mc
 
-returns a new movie clip. 
-See L<SWF::Builder::MovieClip> for the detail.
+returns a new movie clip (type: MovieClip). 
+See L<SWF::Builder::Character::MovieClip> for the detail.
 
 =item $mc->new_gradient
 
 returns a new gradient object.
-See L<SWF::Builder::Gradient> and L<SWF::Builder::Shape> for the detail.
+See L<SWF::Builder::Gradient> and L<SWF::Builder::Character::Shape> for the detail.
 
 =item $mc->new_jpeg( ... )
 
-returns a new JPEG bitmap. See L<SWF::Builder::Bitmap> for the detail.
+returns a new JPEG bitmap (type: Bitmap).
+See L<SWF::Builder::Character::Bitmap> for the detail.
 
 =item $mc->new_bitmap( $type => $obj )
 
-returns a new lossless bitmap. See L<SWF::Builder::Bitmap> for the detail.
+returns a new lossless bitmap (type: Bitmap).
+See L<SWF::Builder::Character::Bitmap> for the detail.
+
+=item $mc->import_asset( $url, $name [, $type] )
+
+returns a character which will be imported from the SWF movie in $url by $name.
+This method does not actually import a character but put
+an 'ImportAssets' tag on the movie.
+$type is a type of the character, such as 'Shape', 'Font', 'Text',
+'EditText', 'MovieClip', and 'Bitmap'.  Default is 'MovieClip'.
+This method does not check whether a character which has $name and $type is actually exported.
 
 =back
 
@@ -701,24 +543,51 @@ HTML anchor.
 
 =back
 
-=head2 Display instance
+=head2 Characters
 
-It is necessary to get the instance to use the defined character.
+Display and export methods of characters are described here.
+See SWF::Builder::Character::* for details of type-specific methods.
+
+=over 4
+
+=item $disp_i = $char->place( [ MovieClip => $mc, Frame => $frame, above => $another_i, below => $another_i, clip_with => $mask_i ] )
+
+places the character on $mc and returns the display instance.
+It can take four optional named parameters.
+'MovieClip'(MC) is a parent movie clip on which the character is placed.
+The movie clip must be under the same root movie with the movie clip 
+in which the character is defined. 
+If MC is not set, the character is placed on the movie clip in which
+it is defined. 
+'Frame' is a first frame number on which the character is placed. Default is 1.
+You can set the relative depth of the new instance by 'above' and 'below'.
+'clip_with' is a mask instance with which the character is clipped.
+
+Font character can't place itself.
+
+=item $mask_i = $char->place_as_mask( [ MovieClip => $mc, Frame => $frame, above => $another_i, below => $another_i ] )
+
+places the character on $mc as the mask object (clipping layer)
+and returns the mask instance.
+It can take optional parameters as same as 'place' method except 'clip_with'.
+You can handle the mask instance as same as the display instance.
+
+Only Shape and Text characters can place_as_mask.
+
+=item $char->export_asset( $name )
+
+sets the character to export by $name.
+Other movies can import the character by $name.
+
+=back
+ 
+=head2 Display instances
+
+It is necessary to get the display instance to show the defined character.
 Each instance has its own timeline tied to the parent movie clip
 and the current frame to move, to rotate, etc.
 
 =over 4
-
-=item $disp_i = $char->place( [ MovieClip => $mc, Frame => $frame, above => $another_i, below => $another_i ] )
-
-returns the display instance of the character.
-It can take four optional named parameters.
-MovieClip(MC) is a parent movie clip on which the character is placed.
-The movie clip must be under the same root with the movie clip in which 
-the character is defined. If MC is not set, the character is placed on
-the movie clip in which it is defined. 
-Frame is a first frame number on which the character is placed. Default is 1.
-You can set the relative depth of the new instance by 'above' and 'below'.
 
 =item $disp_i->name( $name )
 

@@ -1,8 +1,8 @@
-package SWF::Builder::Bitmap::Lossless::ImageMagick;
+package SWF::Builder::Character::Bitmap::Lossless::ImageMagick;
 
 use strict;
 
-our @ISA = ('SWF::Builder::Bitmap::Lossless');
+our @ISA = ('SWF::Builder::Character::Bitmap::Lossless');
 our $VERSION = '0.011';
 
 sub new {
@@ -22,3 +22,4 @@ sub new {
     }, $class;
 }
 
+1;
