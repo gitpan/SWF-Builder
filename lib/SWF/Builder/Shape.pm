@@ -6,7 +6,7 @@ use SWF::Element;
 use SWF::Builder::ExElement;
 use SWF::Builder::Gradient;
 
-our $VERSION="0.01";
+our $VERSION="0.02";
 
 {
     package SWF::Builder::Shape;

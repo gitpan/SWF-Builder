@@ -6,11 +6,12 @@ use utf8;
 use Carp;
 use SWF::Element;
 use SWF::Builder;
+use SWF::Builder::ExElement;
 use SWF::Builder::Shape;
 use Font::TTF::Font;
 use Font::TTF::Ttc;
 
-our $VERSION="0.02";
+our $VERSION="0.03";
 
 our %indirect;
 
@@ -130,6 +131,7 @@ sub new {
 	}
 	$type = $head->{macStyle};
     }
+    utf2bin($fontname);
     $tag->FontName($fontname);
     $tag->FontFlagsBold(1) if ($type & 1);
     $tag->FontFlagsItalic(1) if ($type & 2);
@@ -281,7 +283,6 @@ sub AUTOLOAD {
     my $self = shift;
     my ($sub) = $AUTOLOAD=~/::([^:]+)$/;
     return if $sub eq 'DESTROY';
-
     my $tag = $self->{_tag};
 
     if ($tag->can($sub)) {

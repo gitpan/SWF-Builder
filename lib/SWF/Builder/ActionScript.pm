@@ -5,8 +5,9 @@ use strict;
 use Carp;
 use SWF::Element;
 use SWF::Builder;
+use SWF::Builder::ExElement;
 
-our $VERSION = "0.011";
+our $VERSION = "0.02";
 
 @SWF::Builder::ActionScript::ISA = qw/ SWF::Element::Array::ACTIONRECORDARRAY /;
 
@@ -41,7 +42,10 @@ sub _get_type {
 sub _get_target {
     my $target = shift;
 
-    return $target unless (UNIVERSAL::isa($target, 'SWF::Builder::DisplayInstance'));
+    unless (UNIVERSAL::isa($target, 'SWF::Builder::DisplayInstance')) {
+	utf2bin($target);
+	return $target;
+    }
     my $i = $target;
     my $tp = '';
     until ($i eq $i->{_root}) {
@@ -72,6 +76,7 @@ sub gotoAndStop {
     if ($frame =~ /^\d+$/) {
 	$self->_add_tags( [ 'GotoFrame', Frame => $frame ] );
     } else {
+	utf2bin($frame);
 	$self->_add_tags( [ 'GotoLabel', Label => $frame ] );
     }
 }
@@ -87,6 +92,7 @@ sub stop {
 sub setProperty {
     my ($self, $property, $value) = @_;
 
+    utf2bin($value);
     $self->_add_tags
 	( [ 'Push', 
 	    DataList => [ _adata( String => '' ),
@@ -101,6 +107,7 @@ sub setProperty {
 sub calcProperty {
     my ($self, $property, $op, $value) = @_;
 
+    utf2bin($value);
     $self->_add_tags
 	( [ 'Push', 
 	    DataList => [ _adata( String => '' ),

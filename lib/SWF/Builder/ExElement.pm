@@ -4,8 +4,13 @@ use strict;
 use Carp;
 use SWF::Element;
 
-our $VERSION="0.01";
+require Exporter;
 
+our $VERSION="0.02";
+@SWF::Builder::ExElement::ISA = ('Exporter');
+
+our @EXPORT = ('utf2bin');
+*utf2bin = ($]>=5.008) ? \&utf8::encode : sub{};
 
 package SWF::Builder::ExElement::Color;
 
@@ -133,10 +138,10 @@ sub pack {
     my %rect;
     @rect{qw/ Xmin Ymin Xmax Ymax /} = @$self;
   SWF::Element::RECT->new
-      ( Xmin => $self->[0]*20,
-	Ymin => $self->[1]*20,
-	Xmax => $self->[2]*20,
-	Ymax => $self->[3]*20,
+      ( Xmin => $self->[0],
+	Ymin => $self->[1],
+	Xmax => $self->[2],
+	Ymax => $self->[3],
 	)->pack($stream);
 }
 

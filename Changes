@@ -1,5 +1,10 @@
 Revision history for Perl extension SWF::Builder.
 
+0.04 Sat Mar 13 20:00:00 2004
+	- UTF8 flag is properly cleared now.
+ 	- Fixed wrong calculation of a shape boundary box.
+	- Fixed converting a lossless bitmap with alpha map.
+
 0.03 Tue Dec 23 22:05:00 2003
 	- Converting TTF font more precisely.
 	- SWF character ID now starts with 1.

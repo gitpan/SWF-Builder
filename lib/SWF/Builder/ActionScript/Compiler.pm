@@ -7,10 +7,11 @@ use utf8;
 
 use Carp;
 use SWF::Element;
+use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_03';
+our $VERSION = '0.00_04';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 
@@ -1300,6 +1301,8 @@ bit 0: peephole optimization
     2: calculate math funcs with constant args and constant properties
     3: evaluate the lefthand side of assignment expression only once 
 
+=end
+
 =cut
 
     for my $o (qw/Warning Optimize Version Trace/) {
@@ -1335,10 +1338,10 @@ sub _code_print {
 {
     my %encode = (
 		  GotoFrame      => [qw/ Frame /],
-		  GetURL         => [qw/ URLString TargetString /],
+		  GetURL         => [qw/ $URLString $TargetString /],
 		  WaitForFrame   => [qw/ Frame : SkipCount /],
-		  SetTarget      => [qw/ TargetName /],
-		  GotoLabel      => [qw/ Label /],
+		  SetTarget      => [qw/ $TargetName /],
+		  GotoLabel      => [qw/ $Label /],
 		  WaitForFrame2  => [qw/ : SkipCount /],
 		  Jump           => [qw/ : BranchOffset /],
 		  GetURL2        => [qw/ Method /],
@@ -1399,17 +1402,23 @@ sub _code_print {
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => 'ActionDefineFunction');
 		$param =~ s/ *\'((\\.|[^\'])*)\' *//;
 		my $fname = $1;
+		utf2bin($fname);
 		my @args = split ' ', $param;
+		utf2bin($_) for @args;
 		$tag->CodeSize( $self->{stat}{labelhash}{$self->{stat}{labelhash}{pop @args}} );
 		$tag->FunctionName($fname);
 		$tag->Params(\@args);
 	    } elsif (exists $encode{$action}) {
 		my @args = ($param =~ /\'((\\.|[^\'])*)\'/g);
-
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => $action);
 		for my $e (@{$encode{$action}}) {
 		    if ($e eq ':') {
 			$args[0] = $self->{stat}{labelhash}{$self->{stat}{labelhash}{$args[0]}};
+		    } elsif ($e=~/^\$/) {
+			$e=~s/^\$//;
+			my $str = shift @args;
+			utf2bin($str);
+			$tag->$e($str);
 		    } else {
 			$tag->$e(shift @args);
 		    }
@@ -1458,6 +1467,7 @@ sub _code_print {
 		$escchar{$1} || '\\';
 	    }
 	]eg;
+	utf2bin($str);
 	$str;
     }
 }

@@ -7,7 +7,7 @@ use Carp;
 use SWF::Element;
 use SWF::Builder::Shape;
 
-our $VERSION="0.011";
+our $VERSION="0.02";
 
 @SWF::Builder::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -230,7 +230,11 @@ sub pack {
 	my $tmpl = $self->{_is_alpha} ? 'CCCC':'CCC';
 	for(my $y = 0; $y<$height; $y++) {
 	    for(my $x = 0; $x<$width; $x++) {
-		my $rgba = pack($tmpl, $pixsub->($x, $y));
+		my ($r, $g, $b, $a) = $pixsub->($x,$y);
+		$r = $r * $a / 255;
+		$g = $g * $a / 255;
+		$b = $b * $a / 255;
+		my $rgba = pack($tmpl, $r, $g, $b, $a);
 		unless (exists $colors{$rgba}) {
 		    $colors{$rgba} = pack('C',$index++);
 		}
@@ -259,6 +263,9 @@ sub pack {
 	for(my $y = 0; $y<$height; $y++) {
 	    for(my $x = 0; $x<$width; $x++) {
 		my ($r, $g, $b, $a) = $pixsub->($x,$y);
+		$r = $r * $a / 255;
+		$g = $g * $a / 255;
+		$b = $b * $a / 255;
 		my ($output, $status) = $d->deflate(pack('CCCC', $a,$r,$g,$b));
 		die "Compress error." unless $status == Z_OK;
 		$bm->add($output);
