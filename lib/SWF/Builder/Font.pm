@@ -10,12 +10,12 @@ use SWF::Builder::Shape;
 use Font::TTF::Font;
 use Font::TTF::Ttc;
 
-our $VERSION="0.01";
+our $VERSION="0.02";
 
-my %indirect;
+our %indirect;
 
-@indirect{qw/ _sans _serif _typewriter _\u{30b4}\u{30b7}\u{30c3}\u{30af} _\u{660e}\u{671d} _\u{7b49}\u{5e45} /}
-        = qw/ _sans _serif _typewriter _\u{30b4}\u{30b7}\u{30c3}\u{30af} _\u{660e}\u{671d} _\u{7b49}\u{5e45} /; 
+@indirect{ ('_sans', '_serif', '_typewriter', "_\x{30b4}\x{30b7}\x{30c3}\x{30af}", "_\x{660e}\x{671d}", "_\x{7b49}\x{5e45}") }
+        = ('_sans', '_serif', '_typewriter', "_\x{30b4}\x{30b7}\x{30c3}\x{30af}", "_\x{660e}\x{671d}", "_\x{7b49}\x{5e45}");
 
 @SWF::Builder::Font::ISA = qw/ SWF::Builder::Character /;
 
@@ -25,7 +25,8 @@ sub new {
     my $type = 0;
     my $ttft;
     my $self = bless {
-	_no_glyph => 0,
+	_embed => 1,
+	_read_only => 0,
 	_code_hash => {},
 	_glyph_hash => {},
 	_tag => ($tag = SWF::Element::Tag::DefineFont2->new),
@@ -42,7 +43,7 @@ sub new {
 
     unless (ref($font)) {
 	$fontname ||= $font;
-	$self->{_no_glyph} = 1;
+	$self->{_embed} = 0;
     } else {
 	my ($p_font, $head, $name, $os2, $hhea, $cmap, $loca, $hmtx, $kern);
 	$ttft->{_font} = $p_font = $font;
@@ -76,7 +77,7 @@ sub new {
 
 		if ($fstype & 0x302) {
 		    carp "Embedding outlines of the font '$fontfile' is not permitted";
-		    $self->{_no_glyph} = 1;
+		    $self->{_embed} = 0;
 		    last EMBED;
 		} elsif ($fstype & 4) {
 		    carp "The font '$fontfile' can use only for 'Preview & Print'";
@@ -105,11 +106,12 @@ sub new {
 	    $cmap->read;
 	    $loca->read;
 	    $hmtx->read;
-	    my $scale = 51.2 / $head->{unitsPerEm};   # 1024(Twips/Em) / 20(Twips/Pixel) / S(units/Em) = Scale(Pixel/units)
-	    $tag->FontAscent($hhea->{Ascender} * $scale*20);
-	    $tag->FontDescent(-$hhea->{Descender} * $scale*20);
-	    $tag->FontLeading(0);
+	    my $scale = 1024 / $head->{unitsPerEm};   # 1024(Twips/Em) / S(units/Em) = Scale(twips/units)
+	    $tag->FontAscent($hhea->{Ascender} * $scale);
+	    $tag->FontDescent(-$hhea->{Descender} * $scale);
+	    $tag->FontLeading($hhea->{LineGap} * $scale);  # ?
 	    $self->{_scale}  = $scale;
+	    $self->{_average_width} = defined($os2) ? $os2->{xAvgCharWidth}*$scale : 512;
 	    $ttft->{_cmap}   = $cmap->{Tables}[1]{val}; # Unicode cmap
 	    $ttft->{_advance}= $hmtx->{advance};
 	    $ttft->{_glyphs} = $loca->{glyphs};
@@ -135,6 +137,46 @@ sub new {
     $self;
 }
 
+sub embed {
+    my ($self, $embed) = @_;
+
+    if (defined $embed) {
+	$self->{_embed} = $embed;
+    }
+    return $self->{_embed};
+}
+
+sub is_readonly {
+    shift->{_read_only};
+}
+
+sub get_fontnames {
+    my ($self, $ttc) = @_;
+
+    my $font = Font::TTF::Ttc->open($ttc) 
+      or croak "Can't open TTC font file '$ttc'";
+
+    my @names;
+    for my $f (@{$font->{directs}}) { # For each collected font...
+	$f->{name}->read;
+	my @alias_names;
+	for my $pid (@{$f->{name}{strings}[1]}) { # gathers all font names ( latin, unicode...)
+
+	    for my $eid (@$pid) {
+		while (my ($lid, $s) = each(%$eid)) {
+		    push @alias_names, $s;
+		}
+	    }
+	}
+	push @names, \@alias_names;
+    }
+    return \@names;
+}
+
+sub get_average_width {
+    shift->{_average_width};
+}
+
 sub kern {
     my ($self, $code1, $code2) = @_;
     my $kern_t = $self->{_ttf_tables}{_kern} or return 0;
@@ -150,7 +192,7 @@ sub kern {
 sub add_glyph {
     my ($self, $string) = @_;
 
-    return if $self->{_no_glyph};
+    return unless $self->{_embed};
 
     my $hash = $self->{_glyph_hash};
     my $cmap = $self->{_ttf_tables}{_cmap};
@@ -164,7 +206,7 @@ sub add_glyph {
 
 	my $code = ord($c);
 	my $gid = $cmap->{$code};
-	my $adv = $advances->[$gid] * $scale;
+	my $adv = $advances->[$gid] * $scale/20;    # twips->pixel
 	my $gshape = SWF::Builder::Font::Glyph->new;
 	my $glyph = $glyphs->[$gid];
 	if (defined $glyph) {
@@ -172,8 +214,8 @@ sub add_glyph {
 
 	    my $i = 0;
 	    for my $j (@{$glyph->{endPoints}}) {
-		my @x = map {int($_ * $scale + .5)} @{$glyph->{x}}[$i..$j];
-		my @y = map {- int($_ * $scale + .5)} @{$glyph->{y}}[$i..$j];
+		my @x = map {$_ * $scale} @{$glyph->{x}}[$i..$j];
+		my @y = map {-$_ * $scale} @{$glyph->{y}}[$i..$j];
 		my @f = @{$glyph->{flags}}[$i..$j];
 		$i=$j+1;
 		my $sx = shift @x;
@@ -182,27 +224,26 @@ sub add_glyph {
 		unless ($f & 1) {
 		    push @x, $sx;
 		    push @y, $sy;
-		    push @f, 0;
+		    push @f, $f;
 		    if ($f[0] & 1) {
 			$sx = shift @x;
 			$sy = shift @y;
 			$f  = shift @f;
 		    } else {
-			$sx = int(($sx+$x[0])/2+.5);
-			$sy = int(($sy+$y[0])/2+.5);
+			$sx = ($sx+$x[0])/2;
+			$sy = ($sy+$y[0])/2;
 			$f = 1;
 		    }
 		}
 		push @x, $sx;
 		push @y, $sy;
 		push @f, $f;
-		$gshape->moveto($sx, $sy);
-
+		$gshape->_moveto_twips($sx, $sy);
 		while(@x) {
 		    my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
 		    
 		    if ($f) {
-			$gshape->lineto($x, $y);
+			$gshape->_lineto_twips($x, $y);
 		    } else {
 			my ($ax, $ay);
 			if ($f[0] & 1) {
@@ -210,10 +251,10 @@ sub add_glyph {
 			    $ay=shift @y;
 			    shift @f;
 			} else {
-			    $ax=int(($x+$x[0])/2+.5);
-			    $ay=int(($y+$y[0])/2+.5);
+			    $ax=($x+$x[0])/2;
+			    $ay=($y+$y[0])/2;
 			}
-			$gshape->curveto($x, $y, $ax, $ay);
+			$gshape->_curveto_twips($x, $y, $ax, $ay);
 		    }
 		}
 	    }
@@ -330,6 +371,19 @@ returns a new font.
 $fontfile is a font file name. It should be a TrueType font file (ttf/ttc).
 Optional $fontname is a font name referred by HTMLs in dynamic texts.
 The font name is taken from the TrueType file if not defined.
+
+=item $font->embed( [$embed] )
+
+sets/gets a flag to embed the font or not.
+
+=item $font->is_readonly
+
+gets a permission flag to use the font only 'preview & print'.
+If the flag is set, the font cannot be used for text field.
+
+=item $font->get_average_width
+
+gets the average character width.
 
 =item $font->add_glyph( $char_string )
 

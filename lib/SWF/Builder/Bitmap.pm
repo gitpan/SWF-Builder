@@ -7,7 +7,7 @@ use Carp;
 use SWF::Element;
 use SWF::Builder::Shape;
 
-our $VERSION="0.01";
+our $VERSION="0.011";
 
 @SWF::Builder::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -108,7 +108,8 @@ sub load_jpeg {
     $self->{_jpegfile} = $fn;
     undef $self->{_jpegdata};
 
-    open my $f, '<:raw', $fn or Carp::croak "Can't open $fn";
+    open my $f, '<', $fn or Carp::croak "Can't open $fn";
+    binmode $f;
 
     my $s;
     seek($f, 2, 0);
@@ -135,7 +136,8 @@ sub load_alpha {
     $self->{_alphafile} = $fn;
     undef $self->{_alphadata};
 
-    open my $f, '<:raw', $fn or Carp::croak "Can't open $fn";
+    open my $f, '<', $fn or Carp::croak "Can't open $fn";
+    binmode $f;
     $self->{_is_alpha} = 1;
     $self;
 }
@@ -152,7 +154,8 @@ sub pack {
 	if ($self->{_alphafile}) {
 	    local $/ = \4096;
 	    my $z = deflateInit() or croak "Can't create zlib stream ";
-	    open my $af, "<:raw", $self->{_alphafile} or Carp::croak "Can't open ".$self->{_alphafile};
+	    open my $af, "<", $self->{_alphafile} or Carp::croak "Can't open ".$self->{_alphafile};
+	    binmode $af;
 	    while(defined(my $d = <$af>)) {
 		my ($out, $status) = $z->deflate(\$d);
 		defined $out or croak "Zlib raised an error $status ";

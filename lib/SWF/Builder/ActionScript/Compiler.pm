@@ -10,7 +10,7 @@ use SWF::Element;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_02';
+our $VERSION = '0.00_03';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 
@@ -1386,7 +1386,7 @@ sub _code_print {
 			    push @$dl, SWF::Element::ACTIONDATA::String->new($value);
 			}
 		    } elsif ($type eq 'Number') {
-			if (-2147483648<=$value and $value<2147483648 and $value=~/^-?\d+$/) {
+			if ( $value=~/^-?\d+$/ and -2147483648<=$value and $value<2147483648 ) {
 			    push @$dl, SWF::Element::ACTIONDATA::Integer->new($value);
 			} else {
 			    push @$dl, SWF::Element::ACTIONDATA::Double->new($value);

@@ -7,7 +7,7 @@ use SWF::Element;
 use SWF::Builder::ExElement;
 use Carp;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 @SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');
@@ -492,7 +492,7 @@ sub new {
     my $self = $class->SUPER::new;
     $self->{_root} = $self;
     $self->{_character_IDs} = [];
-    $self->{_ID_seed} = 0;
+    $self->{_ID_seed} = 1;
     $self->{_target_path} = '_root';
     $self->{_to_destroy} = [];
     $self;
@@ -505,7 +505,7 @@ sub get_ID {
 sub pack {
     my ($self, $stream) = @_;
 
-    $self->{_ID_seed} = 0;
+    $self->{_ID_seed} = 1;
     for my $id (@{$self->{_character_IDs}}) {
 	$id->configure(undef);
     }

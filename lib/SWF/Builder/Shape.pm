@@ -25,7 +25,7 @@ our $VERSION="0.01";
 
     sub _set_bounds {
 	my ($self, $x, $y) = @_;
-	my $cw = $self->{_current_line_width} / 2;
+	my $cw = $self->{_current_line_width} * 10;
 
 	$self->{_bounds}->set_boundary($x-$cw, $y-$cw, $x+$cw, $y+$cw);
     }
@@ -45,10 +45,18 @@ our $VERSION="0.01";
 
     sub r_lineto {
 	my $self = shift;
+
+	$self->_r_lineto_twips(map $_*20, @_);
+    }
+
+    sub _r_lineto_twips {
+	my $self = shift;
 	my $edges = $self->{_edges};    
 
 	while (my($dx, $dy) = splice(@_, 0, 2)) {
-	    push @$edges, $edges->new_element( DeltaX => $dx*20, DeltaY => $dy*20 );
+	    $dx = _round($dx);
+	    $dy = _round($dy);
+	    push @$edges, $edges->new_element( DeltaX => $dx, DeltaY => $dy );
 	    $dx = ($self->{_current_X} += $dx);
 	    $dy = ($self->{_current_Y} += $dy);
 	    $self->_set_bounds($dx, $dy);
@@ -58,10 +66,18 @@ our $VERSION="0.01";
 
     sub lineto {
 	my $self = shift;
+
+	$self->_lineto_twips(map $_*20, @_);
+    }
+
+    sub _lineto_twips {
+	my $self = shift;
 	my $edges = $self->{_edges};    
 	
 	while (my($x, $y) = splice(@_, 0, 2)) {
-	    push @$edges, $edges->new_element( DeltaX => ($x-$self->{_current_X})*20, DeltaY => ($y-$self->{_current_Y})*20 );
+	    $x = _round($x);
+	    $y = _round($y);
+	    push @$edges, $edges->new_element( DeltaX => $x-$self->{_current_X}, DeltaY => $y-$self->{_current_Y} );
 	    $self->{_current_X} = $x;
 	    $self->{_current_Y} = $y;
 	    $self->_set_bounds($x, $y);
@@ -71,18 +87,27 @@ our $VERSION="0.01";
 
     sub r_curveto {
 	my $self = shift;
+
+	$self->_r_curveto_twips(map $_*20, @_);
+    }
+
+    sub _r_curveto_twips {
+	my $self = shift;
 	my $edges = $self->{_edges};    
 
 	while(my($cdx, $cdy, $adx, $ady) = splice(@_, 0, 4)) {
 	    my $curx = $self->{_current_X};
 	    my $cury = $self->{_current_Y};
-	
+	    $cdx = _round($cdx);
+	    $cdy = _round($cdy);
+	    $adx = _round($adx);
+	    $ady = _round($ady);
 	    push @$edges, $edges->new_element
 		(
-		 ControlDeltaX => $cdx*20,
-		 ControlDeltaY => $cdy*20,
-		 AnchorDeltaX  => $adx*20,
-		 AnchorDeltaY  => $ady*20,
+		 ControlDeltaX => $cdx,
+		 ControlDeltaY => $cdy,
+		 AnchorDeltaX  => $adx,
+		 AnchorDeltaY  => $ady,
 		 );
 	    $adx = ($self->{_current_X} += $cdx+$adx);
 	    $ady = ($self->{_current_Y} += $cdy+$ady);
@@ -94,19 +119,29 @@ our $VERSION="0.01";
 
     sub curveto {
 	my $self = shift;
+
+	$self->_curveto_twips(map $_*20, @_);
+    }
+
+    sub _curveto_twips {
+	my $self = shift;
 	my $edges = $self->{_edges};    
 
 	while(my ($cx, $cy, $ax, $ay) = splice(@_, 0, 4)) {
 
 	    my $curx = $self->{_current_X};
 	    my $cury = $self->{_current_Y};
-	
+	    $cx = _round($cx);
+	    $cy = _round($cy);
+	    $ax = _round($ax);
+	    $ay = _round($ay);
+
 	    push @$edges, $edges->new_element
 		(
-		 ControlDeltaX => ($cx-$curx)*20,
-		 ControlDeltaY => ($cy-$cury)*20,
-		 AnchorDeltaX  => ($ax-$cx)*20,
-		 AnchorDeltaY  => ($ay-$cy)*20,
+		 ControlDeltaX => $cx-$curx,
+		 ControlDeltaY => $cy-$cury,
+		 AnchorDeltaX  => $ax-$cx,
+		 AnchorDeltaY  => $ay-$cy,
 		 );
 	    $self->{_current_X} = $ax;
 	    $self->{_current_Y} = $ay;
@@ -118,10 +153,17 @@ our $VERSION="0.01";
 
     sub moveto {
 	my ($self, $x, $y)=@_;
+	$self->_moveto_twips($x*20, $y*20);
+    }
+
+    sub _moveto_twips {
+	my ($self, $x, $y)=@_;
 	my $r = $self->_get_stylerecord;
-	
-	$r->MoveDeltaX($x*20);
-	$r->MoveDeltaY($y*20);
+
+	$x = _round($x);
+	$y = _round($y);
+	$r->MoveDeltaX($x);
+	$r->MoveDeltaY($y);
 	$self->{_current_X} = $x;
 	$self->{_current_Y} = $y;
 	$self->_set_bounds($x, $y);
@@ -130,12 +172,19 @@ our $VERSION="0.01";
 
     sub r_moveto {
 	my ($self, $dx, $dy)=@_;
+	$self->_r_moveto_twips($dx*20, $dy*20);
+    }
+
+    sub _r_moveto_twips {
+	my ($self, $dx, $dy)=@_;
 	my $r = $self->_get_stylerecord;
+	$dx = _round($dx);
+	$dy = _round($dy);
 	
 	$dx = ($self->{_current_X} += $dx);
 	$dy = ($self->{_current_Y} += $dy);
-	$r->MoveDeltaX($dx*20);
-	$r->MoveDeltaY($dy*20);
+	$r->MoveDeltaX($dx);
+	$r->MoveDeltaY($dy);
 	$self->_set_bounds($dx, $dy);
 	$self;
     }
@@ -191,7 +240,12 @@ our $VERSION="0.01";
 	$self;
     }
 
+    sub _round {
+	my $a=shift;
 
+	$a||=0;
+	return int($a+0.5*($a<=>0));
+    }
 }
 #####
 {
@@ -351,7 +405,7 @@ our $VERSION="0.01";
     }
 
     sub get_bbox {
-	return @{shift->{_bounds}};
+	return map{$_/20} @{shift->{_bounds}};
     }
 
     sub pack {

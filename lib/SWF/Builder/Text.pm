@@ -8,7 +8,7 @@ use SWF::Element;
 use SWF::Builder::Font;
 use SWF::Builder::ExElement;
 
-our $VERSION="0.01";
+our $VERSION="0.02";
 
 @SWF::Builder::Text::ISA = qw/ SWF::Builder::Character::Displayable SWF::Builder::ExElement::Color::AddColor/;
 
@@ -19,12 +19,15 @@ sub new {
     my $self = bless {
 	_bounds       => SWF::Builder::ExElement::BoundaryRect->new,
 	_textrecords  => [$t1],
+	_kerning      => 1,
 	_current_font => '',
 	_current_size => 12,
-	_max_size     => 0,
+	_max_ascent   => 0,
+	_max_descent  => 0,
+	_p_max_descent=> 0,
 	_current_X    => 0,
 	_current_Y    => 0,
-	_leading      => 2,
+	_leading      => 0,
 	_nl           => $t1,
 	_nl_X         => 0,
 	_nlbounds     => SWF::Builder::ExElement::BoundaryRect->new,
@@ -54,11 +57,17 @@ sub font {
     my ($self, $font) = @_;
     return if $font eq $self->{_current_font};
     croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Font');
+    croak "The font applied to the static text needs to embed glyph data" unless $font->embed;
     my $r = $self->_get_type1;
-    $r->TextHeight($self->{_current_size}*20);
+    my $size = $self->{_current_size};
+    $r->TextHeight($size*20);
     $r->FontID($font->{ID});
     $self->{_current_font} = $font;
     $self->_depends($font);
+    my $as  = $font->{_tag}->FontAscent  * $size / 1024;
+    my $des = $font->{_tag}->FontDescent * $size / 1024;
+    $self->{_max_ascent}  = $as  if $self->{_max_ascent}  < $as;
+    $self->{_max_descent} = $des if $self->{_max_descent} < $des;
     $self;
 }
 
@@ -68,13 +77,32 @@ sub size {
     $r->TextHeight($size*20);
     $r->FontID($self->{_current_font}->{ID});
     $self->{_current_size} = $size;
-    $self->{_max_size} = $size if $self->{_max_size} < $size;
+    my $as  = $self->{_current_font}{_tag}->FontAscent  * $size / 1024;
+    my $des = $self->{_current_font}{_tag}->FontDescent * $size / 1024;
+    $self->{_max_ascent}  = $as  if $self->{_max_ascent}  < $as;
+    $self->{_max_descent} = $des if $self->{_max_descent} < $des;
     $self;
+}
+
+sub kerning {
+    my ($self, $kern) = @_;
+
+    if (defined $kern) {
+	$self->{_kerning} = $kern;
+	$self;
+    } else {
+	$self->{_kerning};
+    }
 }
 
 sub leading {
     my ($self, $leading) = @_;
-    $self->{_leading} = $leading;
+    if (defined $leading) {
+	$self->{_leading} = $leading;
+	$self;
+    } else {
+	$self->{_leading};
+    }
 }
 
 sub color {
@@ -91,18 +119,21 @@ sub _bbox_adjust {
     my $nlbbox = $self->{_nlbounds};
     return unless defined $nlbbox->[0];
 
-    my $s = $self->{_current_Y} + $self->{_max_size};
+    my $s = $self->{_current_Y} + $self->{_max_ascent} + $self->{_p_max_descent};
 
-    $self->{_bounds}->set_boundary($nlbbox->[0], $nlbbox->[1]+$s, $nlbbox->[2], $nlbbox->[3]+$s);
+    $self->{_bounds}->set_boundary($nlbbox->[0], $nlbbox->[1]+$s*20, $nlbbox->[2], $nlbbox->[3]+$s*20);
     $self->{_nlbounds} = SWF::Builder::ExElement::BoundaryRect->new;
 }
 
 sub _line_adjust {
     my $self = $_[0];  # Don't use 'shift'
     &_bbox_adjust;
-    $self->{_current_Y} += $self->{_max_size};
+    $self->{_current_Y} += $self->{_max_ascent} + $self->{_p_max_descent};
     $self->{_nl}->YOffset($self->{_current_Y}*20);
-    $self->{_max_size} = $self->{_current_size};
+    my $size = $self->{_current_size};
+    my $ft = $self->{_current_font}{_tag};
+    $self->{_max_ascent}  = $ft->FontAscent  * $size / 1024;
+    $self->{_max_descent} = $ft->FontDescent * $size / 1024;
     $self->{_nl} = undef;
 }
 
@@ -116,10 +147,11 @@ sub _position {
     my $r = $self->_get_type1;
     $r->XOffset($x*20);
     $r->YOffset($y*20);
-    $self->{_bounds}->set_boundary($x, $y, $x, $y);
+    $self->{_bounds}->set_boundary($x*20, $y*20, $x*20, $y*20);
     $self->{_current_X} = $self->{_nl_X} = $x;
     $self->{_current_Y} = $y;
     $self->{_nl} = $r;
+    $self->{_p_max_descent} = 0;
     $self;
 }
 
@@ -140,11 +172,11 @@ sub text {
     my ($self, $text) = @_;
     my @text = split /([\x00-\x1f]+)/, $text;
     my $font = $self->{_current_font};
-    my $bbox = $self->{_nlbounds};
     my $scale = $self->{_current_size} / 51.2;
     my $glyph_hash = $font->{_glyph_hash};
     
     while (my($text, $ctrl) = splice(@text, 0, 2)) {
+	my $bbox = $self->{_nlbounds};
 	$font->add_glyph($text);
 	my @chars = split //, $text;
 	if (@chars) {
@@ -154,14 +186,14 @@ sub text {
 	    my $x = $self->{_current_X};
 	    for my $c (@chars) {
 		my $ord_c1 = ord($c1);
-		my $kern = defined $c ? $font->kern($ord_c1, ord($c)) : 0;
+		my $kern = ($self->{_kerning} and defined $c) ? $font->kern($ord_c1, ord($c)) : 0;
 #		my $kern = 0;
 		my $adv = ($glyph_hash->{$c1}[0] + $kern) * $scale;
 		my $b = $glyph_hash->{$c1}[2];
 		if (defined $b->[0]) {
-		    $bbox->set_boundary($x+$b->[0]*$scale, $b->[1]*$scale, $x+$b->[2]*$scale, $b->[3]*$scale);
+		    $bbox->set_boundary($x*20+$b->[0]*$scale, $b->[1]*$scale, $x*20+$b->[2]*$scale, $b->[3]*$scale);
 		} else {
-		    $bbox->set_boundary($x, 0, $x, 0);
+		    $bbox->set_boundary($x*20, 0, $x*20, 0);
 		}
 		push @{$trec->[0]}, [$ord_c1, $adv];
 		$x += $adv;
@@ -171,8 +203,12 @@ sub text {
 	}
 
 	if ($ctrl and (my $n = $ctrl=~tr/\n/\n/)) {
+	    my $md = $self->{_max_descent};
+	    my $height = $self->{_max_ascent} + $md;
 	    $self->_line_adjust;
-	    $self->_position($self->{_nl_X}, $self->{_current_Y}+$self->{_max_size}*($n-1) + ($font->{_tag}->FontLeading / 51.2 + $self->{_leading})*$n);
+#	    $self->_position($self->{_nl_X}, $self->{_current_Y} + $height * ($n-1) + ($font->{_tag}->FontLeading * $scale / 20 + $self->{_leading})*$n);
+	    $self->_position($self->{_nl_X}, $self->{_current_Y} + $height * ($n-1) + $self->{_leading} * $n);
+	    $self->{_p_max_descent} = $md;
 	}
     }
     $self;
@@ -181,7 +217,7 @@ sub text {
 sub get_bbox {
     my $self = shift;
     $self->_bbox_adjust;
-    return @{$self->{_bounds}};
+    return map{$_/20} @{$self->{_bounds}};
 }
 
 sub pack {
@@ -211,8 +247,10 @@ sub pack {
 	    $tr->_init_glyphentry :
 	    $tr;
     }
+    pop @$new_tr if $new_tr->[-1]->isa('SWF::Element::TEXTRECORD2::TYPE1');
     
     $tag->pack($stream);
+
 }
 
 
@@ -299,6 +337,10 @@ sets the position of the following text.
 =item $text->leading( $leading )
 
 sets the vertical distance between the lines in pixel.
+
+=item $text->kerning( [$kerning] )
+
+sets/gets a flag to adjust spacing between kern pair. 
 
 =item $text->get_bbox
 
