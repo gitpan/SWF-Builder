@@ -7,7 +7,7 @@ use SWF::Element;
 use SWF::Builder::ExElement;
 use Carp;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 @SWF::Builder::ISA = ('SWF::Builder::ExElement::Color::AddColor');
@@ -769,7 +769,7 @@ The result is an SWF::Element::MATRIX object.
 
 =item $fobj/$disp_i->frame_label( $label [, $anchorflag] )
 
-ssme as those for movie clips, setting the frame number to that of the frame object.
+same as those for movie clips, setting the frame number to that of the frame object.
 
 =back
 

@@ -80,3 +80,4 @@ SetBackgroundColor
 ShowFrame
 TAGS
 
+unlink('test.swf');

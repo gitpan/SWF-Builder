@@ -6,6 +6,8 @@ use Carp;
 use SWF::Element;
 use SWF::Builder;
 
+our $VERSION = "0.011";
+
 @SWF::Builder::ActionScript::ISA = qw/ SWF::Element::Array::ACTIONRECORDARRAY /;
 
 sub _add_tags {
@@ -265,7 +267,7 @@ rotates the movie clip toward $r degree absolutely.
 
 =item $as->r_rotate( $dr )
 
-rotates the movie clip to +$r degree right.
+rotates the movie clip to +$dr degree right.
 
 =item $as->scale( $xscale [, $yscale] )
 

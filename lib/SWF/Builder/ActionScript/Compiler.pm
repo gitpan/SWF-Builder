@@ -10,12 +10,23 @@ use SWF::Element;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_01';
+our $VERSION = '0.00_02';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
-my $INFINITY = 1e+309;  # really all perl treat this as infinity?  OK for ActivePerl.
+my $BE = (CORE::pack('s',1) eq CORE::pack('n',1));
+my $INF  = "\x00\x00\x00\x00\x00\x00\xf0\x7f";
+my $NINF = "\x00\x00\x00\x00\x00\x00\xf0\xff";
+my $NAN  = "\x00\x00\x00\x00\x00\x00\xf8\x7f";
+my $IND  = "\x00\x00\x00\x00\x00\x00\xf8\xff";
+if ($BE) {
+    $INF  = reverse $INF;
+    $NINF = reverse $NINF;
+    $NAN  = reverse $NAN;
+    $IND  = reverse $IND;
+}
+my $INFINITY = unpack('d', $INF);
 
 sub _tokenize {
     my $self = shift;
@@ -2021,7 +2032,15 @@ TIDYUP:
 	my ($self, $context) = @_;
 
 	($context =~/lc?value/) and $self->_error("Can't modify literal item");
-	push @{$self->{stat}{code}}, "Push Number '".($self->{node}[0]=~/^-/ ? '-Infinity' : 'Infinity')."'" if $context;
+	my $value = $self->{node}[0];
+	my $packed = pack('d', $value);
+
+	if ($packed eq $NINF) {
+	    $value = '-Infinity';
+	} elsif ($packed eq $INF) {
+	    $value = 'Infinity';
+	}
+	push @{$self->{stat}{code}}, "Push Number '$value'" if $context;
 	$self;
     }
 
@@ -2070,11 +2089,12 @@ TIDYUP:
     sub _chk_inf_nan {
 	my $self = shift;
 	my $value = $self->{node}[0];
-	
-	if ($value =~ /\#IND/ or $value =~ /\#QNAN/ or $value eq 'NaN') {
+	my $packed = pack('d', $value);
+
+	if ($value eq 'NaN' or $packed eq $IND or $packed eq $NAN) {
 	    $self->{node}[0] = 'NaN';
 	    bless $self, 'SWF::Builder::ActionScript::SyntaxNode::NaN';
-	} elsif ($value =~ /\#INF/) {
+	} elsif ($packed eq $INF or $packed eq $NINF) {
 	    bless $self, 'SWF::Builder::ActionScript::SyntaxNode::Infinity';
 	}
 	$self;

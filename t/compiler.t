@@ -1,7 +1,7 @@
 use Test;
 use strict;
 
-BEGIN { plan tests => 7 }
+BEGIN { plan tests => 9 }
 
 use SWF::Builder::ActionScript::Compiler;
 use SWF::BinStream;
@@ -9,8 +9,21 @@ use SWF::Element;
 
 ok(1);
 
-my $INFINITY = 1e+309;
-ok($INFINITY=~/INF/);
+my $BE = (CORE::pack('s',1) eq CORE::pack('n',1));
+my $INF  = "\x00\x00\x00\x00\x00\x00\xf0\x7f";
+my $NINF = "\x00\x00\x00\x00\x00\x00\xf0\xff";
+my $NAN  = "\x00\x00\x00\x00\x00\x00\xf8\x7f";
+my $IND  = "\x00\x00\x00\x00\x00\x00\xf8\xff";
+if ($BE) {
+    $INF  = reverse $INF;
+    $NINF = reverse $NINF;
+    $NAN  = reverse $NAN;
+    $IND  = reverse $IND;
+}
+my $INFINITY = unpack('d', $INF);
+ok($INFINITY+1, $INFINITY);
+ok(pack('d', -$INFINITY), $NINF);
+ok(pack('d', $INFINITY-$INFINITY), $IND);
 
 my $c;
 my $actions;
