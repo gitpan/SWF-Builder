@@ -9,7 +9,7 @@ use SWF::Builder;
 
 use Carp;
 
-our $VERSION='0.04';
+our $VERSION='0.05';
 
 @SWF::Builder::Character::MovieClip::ISA = ('SWF::Builder::Character::Displayable');
 
@@ -48,7 +48,7 @@ sub _pack {
     if ($self->{_init_action}) {
 	my $tag = SWF::Element::Tag::DoInitAction->new;
 	$tag->SpriteID($self->{ID});
-	$tag->Actions($self->{_init_action});
+	$tag->Actions($self->{_init_action}{_actions});
 	$tag->pack($stream);
     }
 }
@@ -57,9 +57,8 @@ sub init_action {
     require SWF::Builder::ActionScript;
     my $self = shift;
 
-    my $action = SWF::Builder::ActionScript->new(Version => $self->{_root}{_version});
-    $self->{_init_action} = $action->{_actions};
-    return $action;
+    $self->{_root}->_depends($self, 1);
+    $self->{_init_action} ||= SWF::Builder::ActionScript->new(Version => $self->{_root}{_version});
 }
 
 sub _destroy {

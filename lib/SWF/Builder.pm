@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 sub new {
@@ -295,6 +295,9 @@ sub new {
     $self->{_target_path} = '_root';
     $self->{_to_destroy} = [];
     $self->{_version} = $version;
+    $self->{_as_namespace} = {};
+    $self->{_init_action} = undef;
+    $self->{_auto_namer} = 1;
     $self->_init_is_alpha;
     $self;
 }
@@ -302,7 +305,6 @@ sub new {
 sub pack {
     my ($self, $stream) = @_;
 
-    $self->{_ID_seed} = 1;
     for my $id (@{$self->{_character_IDs}}) {
 	$id->configure(undef);
     }
@@ -313,15 +315,80 @@ sub pack {
 
 }
 
+our $EMPTY_SPRITE = SWF::Element::Tag::DefineSprite->new(ControlTags=>[SWF::Element::Tag::ShowFrame->new]);
+
 sub save {
     my ($self, $file) = @_;
     my $stream = $self->{_file};
 
     $self->{_is_alpha}->configure(0);
-  SWF::Element::Tag::SetBackgroundColor->new(BackgroundColor => $self->_add_color($self->{_backgroundcolor}))->pack($stream);
-    $self->{_root}->pack($stream);
+    SWF::Element::Tag::SetBackgroundColor->new(BackgroundColor => $self->_add_color($self->{_backgroundcolor}))->pack($stream);
+    $self->{_ID_seed} = 1;
+    if (keys %{$self->{_as_namespace}}) {
+	my $action = SWF::Builder::ActionScript->new(Version => $self->{_version});
+	$action->compile(_create_namespace_initializer('', '_global', $self->{_as_namespace}));
+#	SWF::Element::Tag::DefineSprite->new(SpriteID => $self->{_ID_seed}, ControlTags=>[SWF::Element::Tag::ShowFrame->new])->pack($stream);
+	SWF::Element::Tag::DefineSprite->new(SpriteID => $self->{_ID_seed}, ControlTags=>[SWF::Element::Tag::End->new])->pack($stream);
+	SWF::Element::Tag::DoInitAction->new(SpriteID => $self->{_ID_seed}++, Actions => $action->{_actions})->pack($stream);
+    }
+    if ($self->{_init_action}) {
+#	SWF::Element::Tag::DefineSprite->new(SpriteID => $self->{_ID_seed}, ControlTags=>[SWF::Element::Tag::ShowFrame->new])->pack($stream);
+	SWF::Element::Tag::DefineSprite->new(SpriteID => $self->{_ID_seed}, ControlTags=>[SWF::Element::Tag::End->new])->pack($stream);
+	SWF::Element::Tag::DoInitAction->new(SpriteID => $self->{_ID_seed}++, Actions => $self->{_init_action}{_actions})->pack($stream);
+    }
+
+    $self->pack($stream);
     $stream->close($file);
 }
+
+sub _create_namespace_initializer {
+    my ($as, $pname, $namehash) = @_;
+
+    for my $name (keys %$namehash) {
+	my $n = "$pname.$name";
+	$as .= <<ASEND;
+//#
+if (eval('$n') == undefined) {
+    set('$n', new Object());
+}
+ASEND
+#//
+        $as = _create_namespace_initializer($as, $n, $namehash->{$name});
+    }
+    return $as;
+}
+
+sub use_namespace {
+    require SWF::Builder::ActionScript;
+
+    my $self = shift;
+
+    while (my $name = shift) {
+	my $ns = $self->{_as_namespace};
+	my @n = split /\./, $name;
+	for my $n (@n) {
+	    $ns->{$n} ||= {};
+	    $ns = $ns->{$n};
+	}
+    }
+}
+
+sub init_action {
+    require SWF::Builder::ActionScript;
+
+    my $self = shift;
+
+    $self->{_init_action} ||= SWF::Builder::ActionScript->new(Version => $self->{_version});
+}
+
+sub auto_namer {
+    shift->{_auto_namer} = 1;
+}
+
+sub no_namer {
+    shift->{_auto_namer} = 0;
+}
+
 
 sub _depends {
     my ($self, $char, $frame) = @_;
@@ -458,6 +525,32 @@ Version is a version number of the SWF. It must be 6 and above.
 
 sets the property. See SWF::Builder->new.
 
+=item $movie->use_namespace( $namespace )
+
+prepares ActionScript namespace. For example, $movie->use_namespace('SWF.Builder')
+creates movieclip which is initialized by
+
+    if (_global.SWF == undefined) {
+	_global.SWF = new Object();
+    }
+    if (_global.SWF.Builder == undefined) {
+	_global.SWF.Builder = new Object();
+    }
+
+and place the movieclip on the first frame of the root movie.
+ 
+=item $movie->init_action
+
+returns SWF::Builder::ActionScript object to initialize the root movie.
+
+=item $movie->no_namer
+
+=item $movie->auto_namer
+
+deactivate/reactivate auto_namer. Default is active.
+Auto_namer gives a suitable name to characters and display instances automatically
+when their name is referred before being named explicitly.
+
 =item $movie->save( $filename )
 
 saves the movie.
@@ -584,13 +677,21 @@ You can handle the mask instance as same as the display instance.
 
 Only Shape and Text characters can place_as_mask.
 
-=item $char->export_asset( $name )
+=item $char->name( [$name] )
 
-sets the character to export by $name.
+gives a name to the character, exports the character, and returns the name.
+ActionScripts can refer the character as $name.
 Other movies can import the character by $name.
+When you call 'name' method without a parameter, the method simply returns the name
+of the character. If the character is not named yet and auto_namer is active,
+auto_namer gives a suitable name.
+
+=item $char->export_asset( [$name] )
+
+Same as $char->name.
 
 =back
- 
+
 =head2 Display instances
 
 It is necessary to get the display instance to show the defined character.
@@ -599,9 +700,12 @@ and the current frame to move, to rotate, etc.
 
 =over 4
 
-=item $disp_i->name( $name )
+=item $disp_i->name( [$name] )
 
-gives a name to the display instance to which ActionScripts can refer.
+gives a name to the display instance to which ActionScripts can refer and returns the name.
+When you call 'name' method without a parameter, the method simply returns the name
+of the character. If the character is not named yet and auto_namer is active,
+auto_namer gives a suitable name.
 
 =item $fobj = $disp_i->frame( $frame )
 

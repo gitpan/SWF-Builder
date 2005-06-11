@@ -1,5 +1,24 @@
 Revision history for Perl extension SWF::Builder.
 
+0.09 Sun Jun 12 01:23:45 2005
+	- ActionScript compiler now supports 'set' statement.
+	- $movie->use_namespace($ns) prepares ActionScript namespace.
+	- 'init_action' for the _root movie is supported.
+	- Characters and display instances are named automatically by default.
+	  $movie->no_namer cancels this feature.
+	- $as->gotoAndPlay/gotoAndStop jumped to a wrong frame. Fixed.
+	- Debug print for $as->tellTarget was removed. (Thanks to Jon Orwant) 
+	- $as->tellTarget got a wrong target path if you gave a display instance.
+	  You must give a target path in string now.
+	- ActionScript compiler wrongly optimized constant expressions. Fixed.
+	   Limitation: It can optimize only the constant terms that queued up
+	   from the head sequentially, i.e. 2*2*a is optimized into 4*a,
+	   but a*2*2 isn't.
+	- Fixed synopsis of SWF::Builder::Character::Bitmap POD.
+                                           (Thanks to Merijn van den Kroonenberg)
+	- SWF::Builder::Character::Text is rewritten with new SWF::Element::TEXTRECORD.
+	   SWF::File (SWF::Element) ver.0.41 is required.
+
 0.08 Sat Feb  5 22:27:33 2005
 	- Support MP3 sound. (Referred to MPEG::Audio::Frame. Thanks to Yuval Kogman)
 	- Change the arguments of 'new_bitmap' method (Incompatiple with 0.07 and before)

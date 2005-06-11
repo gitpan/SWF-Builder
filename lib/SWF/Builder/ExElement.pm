@@ -6,11 +6,12 @@ use SWF::Element;
 
 require Exporter;
 
-our $VERSION="0.04";
+our $VERSION="0.05";
 @SWF::Builder::ExElement::ISA = ('Exporter');
 
-our @EXPORT = ('utf2bin', '_round');
+our @EXPORT = ('utf2bin', 'bin2utf', '_round');
 *utf2bin = ($]>=5.008) ? \&utf8::encode : sub{};
+*bin2utf = ($]>=5.008) ? \&utf8::decode : sub{};
 
 sub _round {
     my $a=shift;

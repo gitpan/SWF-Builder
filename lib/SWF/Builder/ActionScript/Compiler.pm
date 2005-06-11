@@ -3,7 +3,6 @@
 package SWF::Builder::ActionScript::Compiler;
 
 use strict;
-use utf8;
 
 use Carp;
 use SWF::Element;
@@ -11,7 +10,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_07';
+our $VERSION = '0.00_08';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -43,10 +42,12 @@ BEGIN {
 
 use constant \%O;
 
+our %GLOBAL_OPTIONS;
+
 sub new {
     my $class = shift;
     my $text = shift;
-    my %option = @_;
+    my %option = (%GLOBAL_OPTIONS, @_);
 
     my $new = bless {
 	text => $text,
@@ -915,47 +916,47 @@ sub conditional_expression {
 
 {
     my @bin_op = (qw/ OrOp AndOp BitOrOp BitXorOp BitAndOp EqOp RelOp ShiftOp AddOp MultOp /);
-    my %literal_op_sub = (
-		  '*'   => ['_binop_numbers', sub{$_[0] * $_[1]}],
-		  '/'   => ['_binop_numbers',
-			    sub{
-				my ($dividend, $divisor) = @_;
-				if ($divisor == 0) {
-				    return $INFINITY * ($dividend <=> 0);
-				} else {
-				    return $dividend / $divisor;
-				}
-			    }
-			    ],
-		  '%'   => ['_binop_numbers', sub{$_[0] % $_[1]}],
-		  '+'   => ['_binop_Add2'],
-		  '-'   => ['_binop_numbers', sub{$_[0] - $_[1]}],
-		  '<<'  => ['_binop_numbers', sub{(abs($_[0])<<$_[1])*($_[0]<=>0)}],
-		  '>>>' => ['_binop_numbers', sub{$_[0] >> $_[1]}],
-		  '>>'  => ['_binop_numbers', sub{(abs($_[0])>>$_[1])*($_[0]<=>0)}],
-		  '<='  => ['_binop_rel', sub {$_[0] <= $_[1]}, sub {$_[0] le $_[1]}],
-		  '>='  => ['_binop_rel', sub {$_[0] >= $_[1]}, sub {$_[0] ge $_[1]}],
-		  '<'   => ['_binop_rel', sub {$_[0] < $_[1]}, sub {$_[0] lt $_[1]}],
-		  '>'   => ['_binop_rel', sub {$_[0] > $_[1]}, sub {$_[0] gt $_[1]}],
-		  '===' => ['_binop_StrictEquals'],
-		  '!==' => ['_binop_StrictEqualsNot'],
-		  '=='  => ['_binop_Equals2'],
-		  '!='  => ['_binop_Equals2Not'],
-		  '&'   => ['_binop_numbers', sub{$_[0] & $_[1]}],
-		  '^'   => ['_binop_numbers', sub{$_[0] ^ $_[1]}],
-		  '|'   => ['_binop_numbers', sub{$_[0] | $_[1]}],
-		  '&&'  => ['_binop_LogicalAnd'],
-		  '||'  => ['_binop_LogicalOr'],
-
-		  'add' => ['_binop_strings', sub{$_[0].$_[1]}],
-		  'eq'  => ['_binop_strings', sub{$_[0] eq $_[1]}],
-		  'ne'  => ['_binop_strings', sub{$_[0] ne $_[1]}],
-		  'ge'  => ['_binop_strings', sub{$_[0] ge $_[1]}],
-		  'gt'  => ['_binop_strings', sub{$_[0] gt $_[1]}],
-		  'le'  => ['_binop_strings', sub{$_[0] le $_[1]}],
-		  'lt'  => ['_binop_strings', sub{$_[0] lt $_[1]}],
-		  'and' => ['_binop_booleans', sub{$_[0] && $_[1]}],
-		  'or'  => ['_binop_booleans', sub{$_[0] || $_[1]}],
+    my %literal_op_sub =
+	( '*'   => ['_binop_numbers', sub{$_[0] * $_[1]}],
+	  '/'   => ['_binop_numbers',
+		    sub{
+			my ($dividend, $divisor) = @_;
+			if ($divisor == 0) {
+			    return $INFINITY * ($dividend <=> 0);
+			} else {
+			    return $dividend / $divisor;
+			}
+		    }
+		    ],
+	  '%'   => ['_binop_numbers', sub{$_[0] % $_[1]}],
+	  '+'   => ['_binop_Add2'],
+	  '-'   => ['_binop_numbers', sub{$_[0] - $_[1]}],
+	  '<<'  => ['_binop_numbers', sub{(abs($_[0])<<$_[1])*($_[0]<=>0)}],
+	  '>>>' => ['_binop_numbers', sub{$_[0] >> $_[1]}],
+	  '>>'  => ['_binop_numbers', sub{(abs($_[0])>>$_[1])*($_[0]<=>0)}],
+	  '<='  => ['_binop_rel', sub {$_[0] <= $_[1]}, sub {$_[0] le $_[1]}],
+	  '>='  => ['_binop_rel', sub {$_[0] >= $_[1]}, sub {$_[0] ge $_[1]}],
+	  '<'   => ['_binop_rel', sub {$_[0] < $_[1]}, sub {$_[0] lt $_[1]}],
+	  '>'   => ['_binop_rel', sub {$_[0] > $_[1]}, sub {$_[0] gt $_[1]}],
+	  '===' => ['_binop_StrictEquals'],
+	  '!==' => ['_binop_StrictEqualsNot'],
+	  '=='  => ['_binop_Equals2'],
+	  '!='  => ['_binop_Equals2Not'],
+	  '&'   => ['_binop_numbers', sub{$_[0] & $_[1]}],
+	  '^'   => ['_binop_numbers', sub{$_[0] ^ $_[1]}],
+	  '|'   => ['_binop_numbers', sub{$_[0] | $_[1]}],
+	  '&&'  => ['_binop_LogicalAnd'],
+	  '||'  => ['_binop_LogicalOr'],
+	  
+	  'add' => ['_binop_strings', sub{$_[0].$_[1]}],
+	  'eq'  => ['_binop_strings', sub{$_[0] eq $_[1]}],
+	  'ne'  => ['_binop_strings', sub{$_[0] ne $_[1]}],
+	  'ge'  => ['_binop_strings', sub{$_[0] ge $_[1]}],
+	  'gt'  => ['_binop_strings', sub{$_[0] gt $_[1]}],
+	  'le'  => ['_binop_strings', sub{$_[0] le $_[1]}],
+	  'lt'  => ['_binop_strings', sub{$_[0] lt $_[1]}],
+	  'and' => ['_binop_booleans', sub{$_[0] && $_[1]}],
+	  'or'  => ['_binop_booleans', sub{$_[0] || $_[1]}],
 	  );
 
     sub binary_op_expression {
@@ -968,9 +969,8 @@ sub conditional_expression {
 	    my $n = $self->new_node('BinaryOpExpression');
 	    $n->add_node($e1);
 	    while((@op = $self->_get_token)[1] eq $bin_op[$step]) {
-		$f++;
 		my $e = $self->$next($step+1) or last;
-		if ($self->{stat}{Optimize} & O_CONSTEXP and 
+		if (!$f and $self->{stat}{Optimize} & O_CONSTEXP and 
 		    $e1->isa('SWF::Builder::ActionScript::SyntaxNode::Literal') and
 		    (
 		     $e ->isa('SWF::Builder::ActionScript::SyntaxNode::Literal') or
@@ -978,8 +978,9 @@ sub conditional_expression {
 		     $op[0] eq '||')) {
 		    my ($op, @op_param) = @{$literal_op_sub{$op[0]}};
 		    $e1 = $e1->$op($e, @op_param);
-		    $f--;
 		    next;
+		} else {
+		    $f = 1;
 		}
 		$n->add_node($e, $op[0]);
 		$e1=$e;
@@ -998,34 +999,34 @@ sub conditional_expression {
 }
 
 {
-    my %literal_unaryop = (
-			   '!' => sub {
-			       my $l = shift->toboolean;
-			       $l->{node}[0] = -($l->{node}[0] - 1);
-			       return $l;
-			   },
-			   '~' => sub {
-			       my $l = shift->tonumber;
-			       return $l if $l->isa('SWF::Builder::ActionScript::SyntaxNode::NaN');
-			       if ($l->isa('SWF::Builder::ActionScript::SyntaxNode::Infinity')) {
-				   $l->{node}[0] = -1;
-				   return bless $l, 'SWF::Builder::ActionScript::SyntaxNode::NumberLiteral';
-			       } else {
-				   $l->{node}[0] = ~($l->{node}[0]);
-				   return $l;
-			       }
-			   },
-			   '-' => sub {
-			       my $l = shift->tonumber;
-			       return $l if $l->isa('SWF::Builder::ActionScript::SyntaxNode::NaN');
-			       $l->{node}[0] = -($l->{node}[0]);
-			       return $l;
-			   },
-			   '+' => sub {
-			       return shift->tonumber;
-			   },
-			   );
-
+    my %literal_unaryop =
+	( '!' => sub {
+	    my $l = shift->toboolean;
+	    $l->{node}[0] = -($l->{node}[0] - 1);
+	    return $l;
+	},
+	  '~' => sub {
+	      my $l = shift->tonumber;
+	      return $l if $l->isa('SWF::Builder::ActionScript::SyntaxNode::NaN');
+	      if ($l->isa('SWF::Builder::ActionScript::SyntaxNode::Infinity')) {
+		  $l->{node}[0] = -1;
+		  return bless $l, 'SWF::Builder::ActionScript::SyntaxNode::NumberLiteral';
+	      } else {
+		  $l->{node}[0] = ~($l->{node}[0]);
+		  return $l;
+	      }
+	  },
+	  '-' => sub {
+	      my $l = shift->tonumber;
+	      return $l if $l->isa('SWF::Builder::ActionScript::SyntaxNode::NaN');
+	      $l->{node}[0] = -($l->{node}[0]);
+	      return $l;
+	  },
+	  '+' => sub {
+	      return shift->tonumber;
+	  },
+	  );
+    
     sub unary_expression {
 	my $self = shift;
 	my @unaryop = $self->_get_token;
@@ -1696,7 +1697,7 @@ TIDYUP:
     sub _error {
 	my $self = shift;
 	my $msgform = shift;
-
+#	my ($t) = ($self->{text}=~/([^\n]+)/);
 	die sprintf($msgform, @_)." in ".$self->{line}."\n";
     }
 
@@ -3163,6 +3164,20 @@ TIDYUP:
 	} elsif ($context eq 'lcvalue') {
 	    push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable', -1;
 	}
+    }
+
+    sub spf_set {
+	my ($self, $args, $context) = @_;
+
+	$self->_warn(0, "'set' is not recommended to use."); 
+
+	my $code = $self->{stat}{code};
+	$self->_error_param('eval') if @{$args->{node}} != 2;
+	$args->{node}[0]->compile('value');
+	$args->{node}[1]->compile('value');
+	push @$code, "StoreRegister '0'" if $context;
+	push @$code, 'SetVariable';
+	push @$code, "Push Register '0'" if $context;
     }
 
     sub spf_fscommand {

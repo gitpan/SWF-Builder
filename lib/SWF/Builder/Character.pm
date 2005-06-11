@@ -1,11 +1,13 @@
 package SWF::Builder::Character;
 
 use strict;
-use utf8;
 
 use Carp;
 use SWF::Element;
+use SWF::Builder::ExElement;
 use SWF::Builder;
+
+our $VERSION = '0.02';
 
 sub _init_character {
     my $self = shift;
@@ -14,14 +16,38 @@ sub _init_character {
     $self->{_depends} = {};
     $self->{_parent} = undef;
     $self->{_root} = undef;
-    $self->{_export_name} = '';
+    $self->{_export_name} = undef;
 }
 
-sub export_asset {
+sub name {
     my ($self, $name) = @_;
-    $self->{_export_name} = $name;
-    $self->{_root}->_depends($self, 1);
+
+    if (defined $name) {
+	my $rname = $name;
+	croak "Can't rename the character which has been already exported as '".$self->{_export_name}."'" if defined $self->{_export_name};
+	utf2bin($name);
+	$self->{_root}->_depends($self, 1);
+	$self->{_export_name} = $name;
+	return $rname;
+    } else {
+	unless (defined $self->{_export_name}) {
+	    if ($self->{_root}{_auto_namer}) {
+		$name = join('', $self =~ /Character::([^:]+)::.+\(0x(.+)\)$/);
+		$self->{_root}{_names}{$name} = $self;
+		$self->{_root}->_depends($self, 1);
+		$self->{_export_name} = $name;
+	    } else {
+		croak "Can't get the name of the character";
+	    }
+	} else {
+	    my $rname = $self->{_export_name};
+	    bin2utf($rname);
+	    return $rname;
+	}
+    }
 }
+
+*export_asset = \&name;
 
 sub pack {
     my ($self, $stream) = @_;
@@ -39,7 +65,7 @@ sub pack {
 
     $self->_pack($stream);
 
-    if ($self->{_export_name} ne '') {
+    if (defined $self->{_export_name}) {
       SWF::Element::Tag::ExportAssets->new
 	  ( Assets => [[ ID => $self->{ID}, Name => $self->{_export_name}]]
 	    )->pack($stream);
@@ -223,9 +249,28 @@ sub frame {
 sub name {
     my ($self, $name) = @_;
     my $tag = $self->{_tags}[0]{_tag};
-    utf2bin($name);
-    $tag->Name($name) if @_>1;
-    $tag->Name;
+    if (defined $name) {
+	my $rname = $name;
+	croak "Can't rename the display instance, which is already named as '".$self->Name."'" if $tag->Name->defined;
+	utf2bin($name);
+	$tag->Name($name);
+	return $rname;
+    } else {
+	unless ($tag->Name->defined) {
+	    if ($self->{_root}{_auto_namer}) { 
+		($name) = ($self =~ /\(0x(.+)\)$/);
+		$name = "DI$name";
+		$self->{_root}{_names}{$name} = $self;
+		$tag->Name($name);
+	    } else {
+		croak "Can't get the name of the display instance";
+	    }
+	} else {
+	    my $rname = $tag->Name;
+	    bin2utf($rname);
+	    return $rname;
+	}
+    }
 }
 
 sub AUTOLOAD {

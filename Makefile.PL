@@ -10,7 +10,7 @@ WriteMakefile(
 	'SWF::BinStream'  => 0,
 	'SWF::File'       => 0,
 	'SWF::Parser'     => 0,
-	'SWF::Element'    => 0.29,
+	'SWF::Element'    => 0.41,
 	'Font::TTF::Font' => 0.34,
 	'Math::Bezier::Convert' => 0,
     },

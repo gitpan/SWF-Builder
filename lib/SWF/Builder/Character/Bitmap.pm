@@ -9,7 +9,7 @@ use SWF::Builder::ExElement;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.04";
+our $VERSION="0.041";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -318,7 +318,7 @@ SWF::Builder::Character::Bitmap - SWF Bitmap object
 
     use GD;
     $gd = GD::Image->newFromPng( 'tile.png' );
-    my $bm = $mc->new_bitmap( GD => $gd );
+    my $bm = $mc->new_bitmap( $gd, 'GD' );
     my $shape = $mc->new_shape
                 ->fillstyle($bm, 'tiled', $bm->matrix)
 		->box(0, 0, 100, 100);

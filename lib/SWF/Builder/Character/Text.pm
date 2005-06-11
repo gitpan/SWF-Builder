@@ -3,7 +3,7 @@ package SWF::Builder::Character::Text;
 use strict;
 use utf8;
 
-our $VERSION="0.032";
+our $VERSION="0.04";
 
 @SWF::Builder::Character::Text::ISA = qw/ SWF::Builder::Character::UsableAsMask /;
 @SWF::Builder::Character::Text::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Text /;
@@ -24,10 +24,9 @@ use SWF::Builder::ExElement;
 sub new {
     my ($class, $font, $text) = @_;
     my $tag;
-    my $t1 = SWF::Element::TEXTRECORD2::TYPE1->new;
     my $self = bless {
 	_bounds       => SWF::Builder::ExElement::BoundaryRect->new,
-	_textrecords  => [$t1],
+	_textrecords  => SWF::Element::Array::TEXTRECORDARRAY2->new,
 	_kerning      => 1,
 	_current_font => '',
 	_current_size => 12,
@@ -37,29 +36,30 @@ sub new {
 	_current_X    => 0,
 	_current_Y    => 0,
 	_leading      => 0,
-	_nl           => $t1,
+	_nl           => undef,
 	_nl_X         => 0,
 	_nlbounds     => SWF::Builder::ExElement::BoundaryRect->new,
     }, $class;
     $self->_init_character;
     $self->_init_is_alpha;
-    
+    $self->{_nl} = $self->_get_last_record;    
     $self->font($font) if defined $font;
     $self->text($text) if defined $text;
     $self;
 }
 
-sub _get_type1 {
+sub _get_last_record {
     my $self = shift;
     my $records = $self->{_textrecords};
     my $r;
-    if (UNIVERSAL::isa($records->[-1], 'SWF::Element::TEXTRECORD2::TYPE1')) {
-	$r = $records->[-1];
-    } else {
-	$r = SWF::Element::TEXTRECORD2::TYPE1->new;
+
+    if (!@$records or $records->[-1]->GlyphEntries->defined) {
+	$r = SWF::Element::TEXTRECORD2->new;
 	push @$records, $r;
+	return $r;
+    } else {
+	return $records->[-1];
     }
-    return $r;
 }
 
 sub font {
@@ -67,7 +67,7 @@ sub font {
     return if $font eq $self->{_current_font};
     croak "Invalid font" unless UNIVERSAL::isa($font, 'SWF::Builder::Character::Font');
     croak "The font applied to the static text needs to embed glyph data" unless $font->embed;
-    my $r = $self->_get_type1;
+    my $r = $self->_get_last_record;
     my $size = $self->{_current_size};
     $r->TextHeight($size*20);
     $r->FontID($font->{ID});
@@ -82,7 +82,7 @@ sub font {
 
 sub size {
     my ($self, $size) = @_;
-    my $r = $self->_get_type1;
+    my $r = $self->_get_last_record;
     $r->TextHeight($size*20);
     $r->FontID($self->{_current_font}->{ID});
     $self->{_current_size} = $size;
@@ -116,7 +116,7 @@ sub leading {
 
 sub color {
     my ($self, $color) = @_;
-    my $r = $self->_get_type1;
+    my $r = $self->_get_last_record;
     $color = $self->_add_color($color);
     $r->TextColor($color);
     $self;
@@ -153,7 +153,7 @@ sub position {
 
 sub _position {
     my ($self, $x, $y) = @_;
-    my $r = $self->_get_type1;
+    my $r = $self->_get_last_record;
     $r->XOffset($x*20);
     $r->YOffset($y*20);
     $self->{_bounds}->set_boundary($x*20, $y*20, $x*20, $y*20);
@@ -162,19 +162,6 @@ sub _position {
     $self->{_nl} = $r;
     $self->{_p_max_descent} = 0;
     $self;
-}
-
-sub _get_textrecord {
-    my ($self, $font) = @_;
-    my $records = $self->{_textrecords};
-    my $r;
-    if (UNIVERSAL::isa($records->[-1], 'SWF::Builder::Text::TEXTRECORD')) {
-	$r = $records->[-1];
-    } else {
-	$r = SWF::Builder::Text::TEXTRECORD->new($font);
-	push @$records, $r;
-    }
-    return $r;
 }
 
 sub text {
@@ -189,7 +176,7 @@ sub text {
 	$font->add_glyph($text);
 	my @chars = split //, $text;
 	if (@chars) {
-	    my $trec = $self->_get_textrecord($font);
+	    my $gent = $self->{_textrecords}[-1]->GlyphEntries;
 	    my $c1 = shift @chars;
 	    push @chars, undef;
 	    my $x = $self->{_current_X};
@@ -204,7 +191,7 @@ sub text {
 		} else {
 		    $bbox->set_boundary($x*20, 0, $x*20, 0);
 		}
-		push @{$trec->[0]}, [$ord_c1, $adv];
+		push @$gent, SWF::Builder::Text::GLYPHENTRY->new($ord_c1, $adv, $font);
 		$x += $adv;
 		$c1 = $c;
 	    }
@@ -245,18 +232,8 @@ sub _pack {
     }
     $tag->configure( CharacterID => $self->{ID},
 		     TextBounds  => $self->{_bounds},
+		     TextRecords => $self->{_textrecords},
 		     );
-
-    my $new_tr = $tag->TextRecords;
-
-    for my $tr (@{$self->{_textrecords}}) {
-	push @$new_tr,
-	($tr->isa('SWF::Builder::Text::TEXTRECORD')) ?
-	    $tr->_init_glyphentry :
-	    $tr;
-    }
-    pop @$new_tr if $new_tr->[-1]->isa('SWF::Element::TEXTRECORD2::TYPE1');
-    
     $tag->pack($stream);
 
 }
@@ -265,25 +242,22 @@ sub _pack {
 ####
 
 {
-    package SWF::Builder::Text::TEXTRECORD;
-    @SWF::Builder::Text::TEXTRECORD::ISA = ('SWF::Element::TEXTRECORD::TYPE0');
+    package SWF::Builder::Text::GLYPHENTRY;
+    @SWF::Builder::Text::GLYPHENTRY::ISA = ('SWF::Element::GLYPHENTRY');
 
     sub new {
-	my $class = shift;
-	bless [[], shift], $class;   # [characters, advances], font
+	my ($class, $code, $adv, $font) = @_;
+	bless [$code, $adv*20, $font->{_code_hash}], $class;
     }
 
-    sub _init_glyphentry {
+    sub GlyphIndex {
 	my $self = shift;
-	my $code_hash = $self->[1]{_code_hash};
-	my $new_trec = SWF::Element::TEXTRECORD::TYPE0->new;
-	my $ga = $new_trec->GlyphEntries;
 
-	for my $c (@{$self->[0]}) {
-	    my $index = $code_hash->{$c->[0]};
-	    push @$ga, $ga->new_element(GlyphIndex => $index, GlyphAdvance => $c->[1]*20);
-	}
-	return $new_trec;
+	return $self->[2]{$self->[0]};
+    }
+
+    sub GlyphAdvance {
+	return shift->[1];
     }
 }
 

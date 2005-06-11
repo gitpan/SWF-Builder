@@ -7,7 +7,7 @@ use SWF::Element;
 use SWF::Builder;
 use SWF::Builder::ExElement;
 
-our $VERSION = "0.03";
+our $VERSION = "0.04";
 
 sub new {
     my ($class, %param) = @_;
@@ -46,28 +46,14 @@ sub _get_type {
     }
 }
 
-sub _get_target {
-    my $target = shift;
-
-    unless (UNIVERSAL::isa($target, 'SWF::Builder::DisplayInstance')) {
-	utf2bin($target);
-	return $target;
-    }
-    my $i = $target;
-    my $tp = '';
-    until ($i eq $i->{_root}) {
-	croak "Can't get the target path" unless $i->{_tags}[0]{_tag}->Name->defined;
-	$tp = $tp . '/' . $target->{_tags}[0]{_tag}->Name;
-	$i = $i->{_parent};
-    }
-    return $tp;
-}
-
 sub tellTarget {
     my ($self, $target, $code) = @_;
 
-    $self->_add_tags( [ 'SetTarget', TargetName => _get_target($target) ] );
-    print _get_target($target);
+    if (UNIVERSAL::isa($target, 'SWF::Builder::DisplayInstance')) {
+	$target = $target->name;
+    }
+    utf2bin($target);
+    $self->_add_tags( [ 'SetTarget', TargetName => $target ] );
     &$code($self);
     $self->_add_tags( [ 'SetTarget', TargetName => '' ] );
 }
@@ -81,7 +67,7 @@ sub gotoAndStop {
     my ($self, $frame) = @_;
 
     if ($frame =~ /^\d+$/) {
-	$self->_add_tags( [ 'GotoFrame', Frame => $frame ] );
+	$self->_add_tags( [ 'GotoFrame', Frame => $frame-1 ] );
     } else {
 	utf2bin($frame);
 	$self->_add_tags( [ 'GotoLabel', Label => $frame ] );
@@ -246,12 +232,33 @@ creates a clip action. See L<SWF::Builder::MovieClip> for details of the events.
 These method add some simple actions to $as and return $as itself.
 
 =over 4
+=head3 Overloading String Conversion
+
+When you use a SWF::Builder::Character::* in string context,
+the 'name' method is automatically called.
+So you can use a SWF::Builder::Character::* in ActionScript string
+instead of its export name.
+
 
 =item $as->gotoAndPlay( $frame )
+
+=head3 Overloading String Conversion
+
+When you use a SWF::Builder::Character::* in string context,
+the 'name' method is automatically called.
+So you can use a SWF::Builder::Character::* in ActionScript string
+instead of its export name.
 
 tells the flash player to go to $frame.
 
 =item $as->gotoAndStop( $frame )
+=head3 Overloading String Conversion
+
+When you use a SWF::Builder::Character::* in string context,
+the 'name' method is automatically called.
+So you can use a SWF::Builder::Character::* in ActionScript string
+instead of its export name.
+
 
 tells the flash player to go to $frame and stop playing.
 
@@ -298,15 +305,15 @@ hides the movie clip.
 =item $as->tellTarget( $target, \&actionsub )
 
 changes the target movie clip for actions in &actionsub.
-$target is a target path string or a named movie clip instance.
+$target is a target path string in slash syntax.
 &actionsub is called with an ActionScript object whose target is changed.
 For example,
 
-  $mc_i->on('Press')->tellTarget( $mc_i2, sub {
+  $mc_i->on('Press')->tellTarget( 'mc_i2', sub {
       shift->r_rotate(15);
   });
 
-rotates $mc_i2 to 15-degree right when $mc_i is clicked.
+rotates 'mc_i2' to 15-degree right when $mc_i is clicked.
 
 =back
 
