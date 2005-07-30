@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.05";
+our $VERSION="0.06";
 
 our %indirect;
 
@@ -91,7 +91,7 @@ sub new {
 	        or croak 'Invalid font';
 	    if ($os2 = $font->{'OS/2'}||$p_font->{'OS/2'}) {  # get OS/2 table to check the lisence.
 		$os2->read;
-		my $fstype = $os2->{fsType};
+		my $fstype = $os2->{fsType} && 0;
 
 		if ($fstype & 0x302) {
 		    warn "Embedding outlines of the font '$fontfile' is not permitted.\n";
@@ -105,32 +105,32 @@ sub new {
 		warn "The font '$fontfile' doesn't have any lisence information. See the lisence of the font.\n";
 	    }
 	    $head = $font->{head}||$p_font->{head} # header
-	        or croak 'Invalid font';
+	        or croak "Can't find TTF/OTF header of the font $fontname";
 	    $hhea = $font->{hhea}||$p_font->{hhea} # horizontal header
-	        or croak 'Invalid font';
+	        or croak "Can't find hhea table of the font $fontname";
 	    $cmap = $font->{cmap}||$p_font->{cmap} # chr-glyph mapping
-	        or croak 'Invalid font';
+	        or croak "Can't find cmap table of the font $fontname";
 	    $loca = $font->{loca}||$p_font->{loca} # glyph location index
-	        or croak 'Invalid font';
+	        or croak "Can't find glyph index table of the font $fontname";
 	    $hmtx = $font->{hmtx}||$p_font->{hmtx} # horizontal metrics
-	        or croak 'Invalid font';
+	        or croak "Can't find hmtx table of the font $fontname";
 	    $kern = $font->{kern}||$p_font->{kern} # kerning table (optional)
 	        and $kern->read;
 	    $head->read;
 	    $name->read;
 	    $hhea->read;
 	    $cmap->read;
-	    $loca->read;
 	    $hmtx->read;
+	    $loca->read;
 	    my $scale = 1024 / $head->{unitsPerEm};   # 1024(Twips/Em) / S(units/Em) = Scale(twips/unit)
 	    $tag->FontAscent($hhea->{Ascender} * $scale);
 	    $tag->FontDescent(-$hhea->{Descender} * $scale);
 	    $tag->FontLeading($hhea->{LineGap} * $scale);  # ?
 	    $self->{_scale}  = $scale/20; # pixels/unit
 	    $self->{_average_width} = defined($os2) ? $os2->{xAvgCharWidth}*$scale : 512;
-	    $ttft->{_cmap}   = $cmap->{Tables}[1]{val}; # Unicode cmap
+	    $ttft->{_cmap}   = ($cmap->find_ms or croak "Can't find unicode cmap table in the font $fontname")->{val}; # Unicode cmap
 	    $ttft->{_advance}= $hmtx->{advance};
-	    $ttft->{_glyphs} = $loca->{glyphs};
+	    $ttft->{_loca} = $loca; 
 	    eval {
 		for my $kt (@{$kern->{tables}}) {
 		    if ($kt->{coverage} & 1) {
@@ -225,59 +225,82 @@ sub _draw_glyph {
 
     my $scale = $self->{_scale};
     my $gid = $self->{_ttf_tables}{_cmap}{ord($c)};
-    my $glyph = $self->{_ttf_tables}{_glyphs}[$gid];
-
-    if (defined $glyph) {
-	$glyph->read_dat;
-
-	my $i = 0;
-	for my $j (@{$glyph->{endPoints}}) {
-	    my @x = map {$_ * $scale} @{$glyph->{x}}[$i..$j];
-	    my @y = map {-$_ * $scale} @{$glyph->{y}}[$i..$j];
-	    my @f = @{$glyph->{flags}}[$i..$j];
-	    $i=$j+1;
-	    my $sx = shift @x;
-	    my $sy = shift @y;
-	    my $f  = shift @f;
-	    unless ($f & 1) {
-		push @x, $sx;
-		push @y, $sy;
-		push @f, $f;
-		if ($f[0] & 1) {
-		    $sx = shift @x;
-		    $sy = shift @y;
-		    $f  = shift @f;
-		} else {
-		    $sx = ($sx+$x[0])/2;
-		    $sy = ($sy+$y[0])/2;
-		    $f = 1;
+    my $gtable = $self->{_ttf_tables}{_loca}{glyphs};
+    my $glyph1 = $gtable->[$gid];
+    if (defined $glyph1) {
+	$glyph1->read_dat;
+	unless (exists $glyph1->{comps}) {
+	    $self->_draw_glyph_component($glyph1, $gshape);
+	} else {
+	    for my $cg (@{$glyph1->{comps}}) {
+		my @m;
+		@m = (translate => [$cg->{args}[0] * $scale, -$cg->{args}[1] * $scale]) if exists $cg->{args};
+		if (exists $cg->{scale}) {  # Not tested...
+		    my $s = $cg->{scale};
+		    push @m, (ScaleX => $s->[0], RotateSkew0 => $s->[1], RotateSkew1 => $s->[2], ScaleY => $s->[3]);
 		}
-	    }
-	    push @x, $sx;
-	    push @y, $sy;
-	    push @f, $f;
-	    $gshape->moveto($sx, $sy);
-	    while(@x) {
-		my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
-		
-		if ($f) {
-		    $gshape->lineto($x, $y);
-		} else {
-		    my ($ax, $ay);
-		    if ($f[0] & 1) {
-			$ax=shift @x;
-			$ay=shift @y;
-			shift @f;
-		    } else {
-			$ax=($x+$x[0])/2;
-			$ay=($y+$y[0])/2;
-		    }
-		    $gshape->curveto($x, $y, $ax, $ay);
-		}
+		my $ngs = $gshape->transform(\@m);
+		my $glyph = $gtable->[$cg->{glyph}];
+		$glyph->read_dat;
+		$self->_draw_glyph_component($glyph, $ngs);
+		$ngs->end_transform;
 	    }
 	}
     }
     return $self->{_ttf_tables}{_advance}[$gid] * $scale;
+}
+
+sub _draw_glyph_component {
+    my ($self, $glyph, $gshape) = @_;
+
+    my $scale = $self->{_scale};
+
+    my $i = 0;
+    for my $j (@{$glyph->{endPoints}}) {
+	my @x = map {$_ * $scale} @{$glyph->{x}}[$i..$j];
+	my @y = map {-$_ * $scale} @{$glyph->{y}}[$i..$j];
+	my @f = @{$glyph->{flags}}[$i..$j];
+	$i=$j+1;
+	my $sx = shift @x;
+	my $sy = shift @y;
+	my $f  = shift @f;
+	unless ($f & 1) {
+	    push @x, $sx;
+	    push @y, $sy;
+	    push @f, $f;
+	    if ($f[0] & 1) {
+		$sx = shift @x;
+		$sy = shift @y;
+		$f  = shift @f;
+	    } else {
+		$sx = ($sx+$x[0])/2;
+		$sy = ($sy+$y[0])/2;
+		$f = 1;
+	    }
+	}
+	push @x, $sx;
+	push @y, $sy;
+	push @f, $f;
+	$gshape->moveto($sx, $sy);
+	while(@x) {
+	    my ($x, $y, $f)=(shift(@x), shift(@y), (shift(@f) & 1));
+	    
+	    if ($f) {
+		$gshape->lineto($x, $y);
+	    } else {
+		my ($ax, $ay);
+		if ($f[0] & 1) {
+		    $ax=shift @x;
+		    $ay=shift @y;
+		    shift @f;
+		} else {
+		    $ax=($x+$x[0])/2;
+		    $ay=($y+$y[0])/2;
+		}
+		$gshape->curveto($x, $y, $ax, $ay);
+	    }
+	}
+    }
 }
 
 sub add_glyph {
@@ -287,11 +310,6 @@ sub add_glyph {
     return unless $self->{_embed};
 
     my $hash = $self->{_glyph_hash};
-    my $cmap = $self->{_ttf_tables}{_cmap};
-    my $glyphs = $self->{_ttf_tables}{_glyphs};
-    my $advances = $self->{_ttf_tables}{_advance};
-    my $scale = $self->{_scale}*20;
-    my $tag = $self->{_tag};
 
     if (defined $e_char) {
 	@chars = map {chr} (ord($string) .. ord($e_char));

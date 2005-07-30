@@ -18,6 +18,7 @@ lib/SWF/Builder/Character/EditText.pm
 lib/SWF/Builder/Character/Sound.pm
 lib/SWF/Builder/Character/Bitmap/Lossless/Custom.pm
 lib/SWF/Builder/Character/Bitmap/Lossless/GD.pm
+lib/SWF/Builder/Character/Bitmap/Lossless/GDPixel.pm
 lib/SWF/Builder/Character/Bitmap/Lossless/ImageMagick.pm
 lib/SWF/Builder/Character/Sound/MP3.pm
 scripts/exportasset.plx

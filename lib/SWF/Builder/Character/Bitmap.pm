@@ -9,7 +9,7 @@ use SWF::Builder::ExElement;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.041";
+our $VERSION="0.042";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -32,6 +32,10 @@ sub place {
 ####
 
 @SWF::Builder::Character::Bitmap::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Bitmap /;
+
+sub place {
+  Carp::croak "Can't place the imported bitmap because it's size is unknown";
+}
 
 ####
 

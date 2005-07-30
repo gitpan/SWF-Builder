@@ -1,5 +1,11 @@
 Revision history for Perl extension SWF::Builder.
 
+0.10 Sat Jul 30 23:38:00 2005
+	- Imported character wrongly deleted if the character be reffered only by ActionScript. Fixed.
+	- GD bitmap is now converted by reading GD binary data directly (Experimental).
+	  To use the older version (to convert pixel by pixel), $m->new_bitmap($gd, 'GDPixel');
+	- Fixed to fail embedding composite glyphs. (Thanks to Herbert Volkmann)
+
 0.09 Sun Jun 12 01:23:45 2005
 	- ActionScript compiler now supports 'set' statement.
 	- $movie->use_namespace($ns) prepares ActionScript namespace.

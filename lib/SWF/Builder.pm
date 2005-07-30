@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 sub new {
@@ -208,7 +208,9 @@ sub new_sound {
 sub import_asset {
     my $self = shift;
 
-    $self->_new_character(SWF::Builder::Character::Imported->new(@_));
+    my $i = $self->_new_character(SWF::Builder::Character::Imported->new(@_));
+    $i->_depends($self, 1);  # set 'depend' flag by force because imported assets may be used only by ActionScript.
+    $i;
 }
 
 #sub shape_tween {
