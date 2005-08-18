@@ -5,7 +5,7 @@ use Carp;
 use SWF::Element;
 use SWF::Builder::ExElement;
 
-our $VERSION="0.01";
+our $VERSION="0.02";
 
 ####
 
@@ -982,8 +982,8 @@ sub starshape {
 	my $sy = $self->{matrix}->ScaleY;
 	my $r0 = $self->{matrix}->RotateSkew0;
 	my $r1 = $self->{matrix}->RotateSkew1;
-	my $tx = $self->{matrix}->TranslateX;
-	my $ty = $self->{matrix}->TranslateY;
+	my $tx = $self->{matrix}->TranslateX||0;
+	my $ty = $self->{matrix}->TranslateY||0;
 	my @p;
 
 	while (my ($x, $y) = splice(@_, 0, 2)) {

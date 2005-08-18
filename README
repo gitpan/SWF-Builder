@@ -11,6 +11,10 @@ This package contains:
   SWF::Builder::Bitmap::Lossless::*
                                  - Drivers for SWF Bitmap object.
   SWF::Builder::Character::Font  - SWF font object.
+  SWF::Builder::Character::Font::TTF
+				 - Font manager using Font::TTF.
+  SWF::Builder::Character::Font::FreeType
+				 - Font manager using Font::FreeType.
   SWF::Builder::Character::MovieClip
                                  - SWF movie clip object.
   SWF::Builder::Character::Shape - SWF shape object.
@@ -25,8 +29,12 @@ PREREQUISITES
 
 perl 5.8 or higher
 SWF::File 0.27 or higher
-Font::TTF
-Math::Bezier::Convert
+
+Either Font::TTF or Font::FreeType is necessary to use fonts and texts.
+Font::TTF supports only TTF, but is written in pure perl.
+Font::FreeType supports TTF, OTF, and PostScript fonts, but requires FreeType library and C compiler.
+
+Math::Bezier::Convert is necessary to draw cubic bezier curves.
 
 INSTALLATION
 

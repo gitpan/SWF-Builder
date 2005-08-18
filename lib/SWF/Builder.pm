@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 sub new {
@@ -209,7 +209,7 @@ sub import_asset {
     my $self = shift;
 
     my $i = $self->_new_character(SWF::Builder::Character::Imported->new(@_));
-    $i->_depends($self, 1);  # set 'depend' flag by force because imported assets may be used only by ActionScript.
+    $self->_depends($i, 1);  # set 'depend' flag by force because imported assets may be used only by ActionScript.
     $i;
 }
 

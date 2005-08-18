@@ -1,5 +1,13 @@
 Revision history for Perl extension SWF::Builder.
 
+0.11 Thu Aug 18 23:09:00 2005
+	- Fixed to fail packing imported characters when import_asset is used in a movieclip.
+                                                                 (Thanks to keclik)
+	- Support OTF and PostScript fonts using Font::FreeType.
+	  Pureperl Font::TTF support (for only TTF) also remains.
+	- Font::TTF and Math::Bezier::Convert are deleted from PREREQ_PM in Makefile.PL
+	  to be able to install without them. See PREREQUISITES section of README.
+
 0.10 Sat Jul 30 23:38:00 2005
 	- Imported character wrongly deleted if the character be reffered only by ActionScript. Fixed.
 	- GD bitmap is now converted by reading GD binary data directly (Experimental).
