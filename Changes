@@ -1,7 +1,12 @@
 Revision history for Perl extension SWF::Builder.
 
+0.12 Sun Sep 18 02:10:50 2005
+	- Fixed unicode string literals' escaping in ActionScript compiler. (Thanks to Nachi Ueno)
+	- Support an escape sequence represents a byte specified in octal in ActionScript compiler.
+	- Fixed indirect font support broken on ver.0.11.
+
 0.11 Thu Aug 18 23:09:00 2005
-	- Fixed to fail packing imported characters when import_asset is used in a movieclip.
+	- Fixed packing imported characters when import_asset is used in a movieclip.
                                                                  (Thanks to keclik)
 	- Support OTF and PostScript fonts using Font::FreeType.
 	  Pureperl Font::TTF support (for only TTF) also remains.
@@ -12,7 +17,7 @@ Revision history for Perl extension SWF::Builder.
 	- Imported character wrongly deleted if the character be reffered only by ActionScript. Fixed.
 	- GD bitmap is now converted by reading GD binary data directly (Experimental).
 	  To use the older version (to convert pixel by pixel), $m->new_bitmap($gd, 'GDPixel');
-	- Fixed to fail embedding composite glyphs. (Thanks to Herbert Volkmann)
+	- Fixed embedding composite glyphs. (Thanks to Herbert Volkmann)
 
 0.09 Sun Jun 12 01:23:45 2005
 	- ActionScript compiler now supports 'set' statement.

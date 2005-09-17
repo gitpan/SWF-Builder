@@ -10,7 +10,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_08';
+our $VERSION = '0.00_09';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -1608,9 +1608,11 @@ sub _code_print {
     sub _unescape {
 	my $str = shift;
 
-	$str =~s[\\(u([0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])|x([0-9a-fA-F][0-9a-fA-F])|.)][
+	$str =~s[\\(u([0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])|x([0-9a-fA-F][0-9a-fA-F])|([0-3][0-7][0-7])|.)][
 	    if ($2||$3) {
 		eval(qq("\\x{).($2||$3).qq(}"));
+	    } elsif ($4) {
+		eval(qq("\\$4"));
 	    } else {
 		$escchar{$1} || '\\';
 	    }
@@ -2332,7 +2334,7 @@ TIDYUP:
 
 	($context =~/lc?value/) and $self->_error("Can't modify literal item");
 	my $value = $self->{node}[0];
-	$value =~ s/([^\x20-\x7e])/sprintf('\\x%2.2x', ord($1))/eg;
+	$value =~ s/([\x00-\x1f\x7f-\xff])/sprintf('\\x%2.2x', ord($1))/eg;
 	push @{$self->{stat}{code}}, "Push String '".$value."'" if $context;
 	$self;
     }

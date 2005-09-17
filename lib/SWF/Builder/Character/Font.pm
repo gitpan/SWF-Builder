@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.07";
+our $VERSION="0.08";
 
 our %indirect;
 
@@ -47,14 +47,15 @@ sub new {
 	_tag => ($tag = SWF::Element::Tag::DefineFont2->new),
     }, $class;
 
+    $self->_init_character;
+    $tag->FontID($self->{ID});
+
     if (exists $indirect{$fontfile}) {
 	utf2bin($fontfile);
 	$tag->FontName($fontfile);
+	$self->embed(0);
 	return $self;
     }
-
-    $self->_init_character;
-    $tag->FontID($self->{ID});
 
     $self->_init_font($fontfile, $fontname);
 }
