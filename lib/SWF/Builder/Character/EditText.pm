@@ -3,7 +3,7 @@ package SWF::Builder::Character::EditText;
 use strict;
 use utf8;
 
-our $VERSION="0.011";
+our $VERSION="0.02";
 
 @SWF::Builder::Character::EditText::ISA = qw/ SWF::Builder::Character::Displayable SWF::Builder::ExElement::Color::AddColor/;
 
@@ -111,10 +111,11 @@ sub draw_border {
     my $self =shift;
 
     $self->{_tag}->Border(1);
+    $self;
 }
 
 {
-    my %align = (left=>0, right=>1, center=>3, justify=>4);
+    my %align = (left=>0, right=>1, center=>2, justify=>3);
 
     sub align {
 	my ($self, $align) = @_;
@@ -138,6 +139,7 @@ sub AUTOLOAD {
     return if $sub eq 'DESTROY';
     if ($self->{_tag}->can($sub)) {
 	$self->{_tag}->$sub(@_);
+	$self;
     } else {
 	croak "Can\'t locate object method \"$sub\" via package \"".ref($self).'"';
     }
@@ -231,6 +233,7 @@ sub _box_size_in_twips {
     $self->SUPER::_box_size_in_twips($w, $h);
     $self->{_modified_width} = 1 if defined $w;
     $self->{_modified_height} = 1 if defined $h;
+    $self;
 }
 
 sub _pack {

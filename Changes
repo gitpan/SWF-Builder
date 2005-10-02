@@ -1,5 +1,10 @@
 Revision history for Perl extension SWF::Builder.
 
+0.13 Sun Oct  2 15:45:15 2005
+	- Fixed $etext->align('center' / 'justify') properly in SWF::B::C::EditText.
+	- Fixed some method in SWF::B::C::EditText to return $self properly.
+	- Indirect font is now available without Font::TTF and Font::FreeType.
+
 0.12 Sun Sep 18 02:10:50 2005
 	- Fixed unicode string literals' escaping in ActionScript compiler. (Thanks to Nachi Ueno)
 	- Support an escape sequence represents a byte specified in octal in ActionScript compiler.

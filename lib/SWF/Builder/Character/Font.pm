@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.08";
+our $VERSION="0.09";
 
 our %indirect;
 
@@ -30,10 +30,6 @@ use SWF::Element;
 use SWF::Builder;
 use SWF::Builder::ExElement;
 
-eval { require SWF::Builder::Character::Font::FreeType }
-or eval { require SWF::Builder::Character::Font::TTF }
-or croak "Failed loading font module. It is necessary to install Font-FreeType or Font-TTF to use fonts";
-
 @SWF::Builder::Character::Font::Def::ISA = qw/ SWF::Builder::Character::Font /;
 
 sub new {
@@ -41,6 +37,7 @@ sub new {
     my $tag;
     my $self = bless {
 	_embed => 1,
+	_average_width => 512,
 	_read_only => 0,
 	_code_hash => {},
 	_glyph_hash => {},
@@ -57,7 +54,17 @@ sub new {
 	return $self;
     }
 
-    $self->_init_font($fontfile, $fontname);
+    eval {$self->_init_font($fontfile, $fontname)};
+    if ($@) {
+	if ($@ =~ /Can\'t locate object method/) {
+	    eval { require SWF::Builder::Character::Font::FreeType }
+	    or eval { require SWF::Builder::Character::Font::TTF }
+	    or croak "Failed loading font module. It is necessary to install Font-FreeType or Font-TTF to use outline fonts";
+	    $self->_init_font($fontfile, $fontname);
+	} else {
+	    die;
+	}
+    }
 }
 
 sub embed {
@@ -198,7 +205,15 @@ This module creates SWF fonts from TrueType fonts.
 =item $font = $mc->new_font( $fontfile [, $fontname] )
 
 returns a new font.
-$fontfile is a font file name. It should be a TrueType font file (ttf/ttc).
+$fontfile is a outline font file name or an indirect font name. 
+The font file name should be specified a full path name.  
+Supported indirect font names are '_sans', '_serif', '_typewriter', 
+"_\x{30b4}\x{30b7}\x{30c3}\x{30af}" ('gosikku' in Japanese katakana), 
+"_\x{660e}\x{671d}" ('mincho' in Japanese kanji), 
+and "_\x{7b49}\x{5e45}" ('tofuku' in Japanese kanji).
+When you use outline fonts, either Font::TTF or Font::FreeType is necessary.
+Font::TTF supports TrueType fonts (*.ttf/*.ttc).  Font::FreeType supports TrueType, 
+OpenType, and PostScript fonts (*.ttf/*.ttc/*.otf/*.pfb).
 Optional $fontname is a font name referred by HTMLs in dynamic texts.
 The font name is taken from the TrueType file if not defined.
 
@@ -210,10 +225,12 @@ sets/gets a flag to embed the font or not.
 
 gets a permission flag to use the font only 'preview & print'.
 If the flag is set, the font cannot be used for text field.
+This works properly only when Font::TTF are used and 'OS/2' table are defined in the font.
 
 =item $font->get_average_width
 
 gets the average character width.
+This works properly only when Font::TTF are used and 'OS/2' table are defined in the font.
 
 =item $font->add_glyph( $char_string [, $e_char] )
 
