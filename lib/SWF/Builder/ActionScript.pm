@@ -7,7 +7,7 @@ use SWF::Element;
 use SWF::Builder;
 use SWF::Builder::ExElement;
 
-our $VERSION = "0.04";
+our $VERSION = "0.041";
 
 sub new {
     my ($class, %param) = @_;
@@ -232,33 +232,12 @@ creates a clip action. See L<SWF::Builder::MovieClip> for details of the events.
 These method add some simple actions to $as and return $as itself.
 
 =over 4
-=head3 Overloading String Conversion
-
-When you use a SWF::Builder::Character::* in string context,
-the 'name' method is automatically called.
-So you can use a SWF::Builder::Character::* in ActionScript string
-instead of its export name.
-
 
 =item $as->gotoAndPlay( $frame )
-
-=head3 Overloading String Conversion
-
-When you use a SWF::Builder::Character::* in string context,
-the 'name' method is automatically called.
-So you can use a SWF::Builder::Character::* in ActionScript string
-instead of its export name.
 
 tells the flash player to go to $frame.
 
 =item $as->gotoAndStop( $frame )
-=head3 Overloading String Conversion
-
-When you use a SWF::Builder::Character::* in string context,
-the 'name' method is automatically called.
-So you can use a SWF::Builder::Character::* in ActionScript string
-instead of its export name.
-
 
 tells the flash player to go to $frame and stop playing.
 

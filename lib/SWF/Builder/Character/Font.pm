@@ -3,7 +3,7 @@ package SWF::Builder::Character::Font;
 use strict;
 use utf8;
 
-our $VERSION="0.09";
+our $VERSION="0.091";
 
 our %indirect;
 
@@ -65,6 +65,7 @@ sub new {
 	    die;
 	}
     }
+    $self;
 }
 
 sub embed {

@@ -9,7 +9,7 @@ use SWF::Builder::Character;
 
 use Carp;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 my $SFTAG = SWF::Element::Tag::ShowFrame->new;
 
 sub new {

@@ -10,7 +10,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_09';
+our $VERSION = '0.00_10';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -3736,7 +3736,7 @@ TIDYUP:
 	my ($e, $op) = @{$self->{node}};
 	my $code = $self->{stat}{code};
 
-	push @$code, 'Push Number 0' if ($op eq '-' and $context);
+	push @$code, "Push Number '0'" if ($op eq '-' and $context);
 	$e->compile($context);
 	push @$code, @{$unary_op{$op}} if ($op ne '+' and $context);
     }

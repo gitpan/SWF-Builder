@@ -1,5 +1,11 @@
 Revision history for Perl extension SWF::Builder.
 
+0.14 Mon Oct 10 14:35:19 2005
+	- Fixed $movie->new_font broken on ver.0.13.
+	- Fixed TrueType collection support by SWF::B::C::Font::FreeType.
+	- ActionScript compiler failed to compile unary '-'. Fixed.
+	- Deleted odd POD of SWF::B::ActionScript.
+
 0.13 Sun Oct  2 15:45:15 2005
 	- Fixed $etext->align('center' / 'justify') properly in SWF::B::C::EditText.
 	- Fixed some method in SWF::B::C::EditText to return $self properly.

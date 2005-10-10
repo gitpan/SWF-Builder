@@ -1,6 +1,6 @@
 package SWF::Builder::Character::Font::FreeType;
 
-our $VERSION="0.01";
+our $VERSION="0.02";
 
 ####
 
@@ -21,16 +21,16 @@ sub _init_font {
 
     my $tag = $self->{_tag};
 
-    $self->{_freetype} = my $font = Font::FreeType->new->face($fontfile, load_flags => FT_LOAD_NO_HINTING)
+    my $font = Font::FreeType->new->face($fontfile, load_flags => FT_LOAD_NO_HINTING)
 	or croak "Can't open font file '$fontfile'";
 
     if ($font->number_of_faces > 1 and $fontname and $fontname ne $font->family_name and $fontname ne $font->postscript_name) {
-	for my $i (2..$font->number_of_faces) {
-	    $font = Font::FreeType->new->face($fontfile, $i);
+	for (my $i = 1; $i < $font->number_of_faces; $i++) {
+	    $font = Font::FreeType->new->face($fontfile, index => $i, load_flags => FT_LOAD_NO_HINTING);
 	    last if ($fontname eq $font->family_name or $fontname eq $font->postscript_name);
 	}
     }
-
+    $self->{_freetype} = $font;
     unless ($fontname ||= $font->family_name || $font->postscript_name) {
 	($fontname) = ($fontfile =~ /.*\/([^\\\/.]+)/);
     }
