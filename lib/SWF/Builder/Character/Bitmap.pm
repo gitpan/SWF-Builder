@@ -9,7 +9,7 @@ use SWF::Builder::ExElement;
 use SWF::Builder::Character;
 use SWF::Builder::Character::Shape;
 
-our $VERSION="0.042";
+our $VERSION="0.044";
 
 @SWF::Builder::Character::Bitmap::ISA = qw/ SWF::Builder::Character::Displayable /;
 
@@ -30,6 +30,8 @@ sub place {
 }
 
 ####
+
+package SWF::Builder::Character::Bitmap::Imported;
 
 @SWF::Builder::Character::Bitmap::Imported::ISA = qw/ SWF::Builder::Character::Imported SWF::Builder::Character::Bitmap /;
 
@@ -82,7 +84,7 @@ sub JPEGData {
     my $self = shift;
     my $pos = 2;
     my $len = length($_[0]);
-    $self->{_jepgdata} = $_[0];
+    $self->{_jpegdata} = $_[0];
 
     while((my $s=substr($_[0], $pos, 2)) ne "\xff\xc0" and $pos < $len) {
 	$pos += 2+unpack('n', substr($_[0], $pos+2,2));

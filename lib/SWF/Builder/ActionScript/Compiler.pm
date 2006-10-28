@@ -10,7 +10,7 @@ use SWF::Builder::ExElement;
 
 @SWF::Builder::ActionScript::Compiler::ISA = ('SWF::Builder::ActionScript::Compiler::Error');
 
-our $VERSION = '0.00_10';
+our $VERSION = '0.01';
 $VERSION = eval $VERSION;  # see L<perlmodstyle>
 
 my $nl = "\x0a\x0d\x{2028}\x{2029}";
@@ -272,14 +272,14 @@ sub _get_token {
 		my $key = $1;
 		return ((ref($reserved{$key})? @{$reserved{$key}} : ($key, $reserved{$key}||(exists $property{lc($key)} ? 'Property' : 'Identifier'))), $ln);
 	    };
-	s/\A\"((?>(?:[^"\\]|\\.)*))\"//s
+	s/\A\"((?>(?:[^\"\\]|\\.)*))\"//s
 	    and do {
 		my $s = $1;
 		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
                 $s=~s/(\\*)\'/$1.(length($1)%2==1?"'":"\\'")/ge;
 		return ($s, 'StringLiteral', $ln);
 	    };
-	s/\A\'((?>(?:[^'\\]|\\.)*))\'//s
+	s/\A\'((?>(?:[^\'\\]|\\.)*))\'//s
 	    and do {
 		my $s = $1;
 		$self->{line}+=scalar($s=~tr/\x0a\x0d\x{2028}\x{2029}/\x0a\x0d\x{2028}\x{2029}/);
@@ -1467,7 +1467,7 @@ sub _code_print {
 {
     my %encode = (
 		  GotoFrame      => [qw/ Frame /],
-		  GetURL         => [qw/ $URLString $TargetString /],
+		  GetURL         => [qw/ $UrlString $TargetString /],
 		  WaitForFrame   => [qw/ Frame : SkipCount /],
 		  SetTarget      => [qw/ $TargetName /],
 		  GotoLabel      => [qw/ $Label /],
@@ -1508,7 +1508,7 @@ sub _code_print {
 	    } elsif ($action eq 'Push') {
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => 'ActionPush');
 		my $dl = $tag->DataList;
-		while(($param =~ / *([^ ]+) +\'((\\.|[^\'])*)\' */g)) {
+                while(($param =~ / *([^ ]+) +\'((:?\\.|[^\'])*)\' */g)) {
 		    my ($type, $value) = ($1, $2);
 		    if ($type eq 'String') {
 			$value = _unescape($value);
@@ -1529,7 +1529,7 @@ sub _code_print {
 		}
 	    } elsif ($action eq 'DefineFunction') {
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => 'ActionDefineFunction');
-		$param =~ s/ *\'((\\.|[^\'])*)\' *//;
+                $param =~ s/ *\'((?:\\.|[^\'])*)\' *//;
 		my $fname = $1;
 		utf2bin($fname);
 		my @args = split ' ', $param;
@@ -1539,7 +1539,7 @@ sub _code_print {
 		$tag->Params(\@args);
 	    } elsif ($action eq 'DefineFunction2') {
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => 'ActionDefineFunction2');
-		$param =~ s/ *\'((\\.|[^\'])*)\' *//;
+                $param =~ s/ *\'((?:\\.|[^\'])*)\' *//;
 		my $fname = $1;
 		utf2bin($fname);
 		my ($regcount, $flag, @args) = split ' ', $param;
@@ -1557,7 +1557,7 @@ sub _code_print {
 		    push @$regp, $n;
 		}
 	    } elsif (exists $encode{$action}) {
-		my @args = ($param =~ /\'((\\.|[^\'])*)\'/g);
+              my @args = ($param =~ /\'((?:\\.|[^\'])*)\'/g);
 		$tag = SWF::Element::ACTIONRECORD->new( Tag => $action);
 		for my $e (@{$encode{$action}}) {
 		    if ($e eq ':') {
@@ -2530,15 +2530,15 @@ TIDYUP:
 	my $var = $self->{node}[0];
 
 	if ($regvars and exists $regvars->{$var}) {
-	    push @$code, "Push Register '".$regvars->{$var}."'" if $context eq 'value' or $context eq 'lcvalue';
+	    push @$code, "Push Register '".$regvars->{$var}."'" if $context ne 'lvalue';
 	    push @$code, "StoreRegister '".$regvars->{$var}."'", 'Pop', -2 if $context eq 'lvalue' or $context eq 'lcvalue';
 	} else {
 	    push @$code, "Push String '$var'";
 	    push @$code, 'GetVariable' if $context eq 'value' or not $context;
 	    push @$code, 'SetVariable', -1 if $context eq 'lvalue';
 	    push @$code, 'PushDuplicate', 'GetVariable', 'SetVariable', -1 if $context eq 'lcvalue';
-	    push @$code, "Pop" unless $context;
 	}
+	push @$code, "Pop" unless $context;
 	$self;
     }
 

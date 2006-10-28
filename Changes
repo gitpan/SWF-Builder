@@ -1,5 +1,10 @@
 Revision history for Perl extension SWF::Builder.
 
+0.15 Sat Oct 29 00:00:00 2006
+	- Fixed compiling GetURL function. (Thanks to Igor Semenov)
+	- Fixed typo in SWF::B::C::Bitmap.pm. (Thanks to Gordon McCreight)
+	- Fixed package name SWF::B::C::Bitmap::Imported.
+
 0.14 Mon Oct 10 14:35:19 2005
 	- Fixed $movie->new_font broken on ver.0.13.
 	- Fixed TrueType collection support by SWF::B::C::Font::FreeType.
