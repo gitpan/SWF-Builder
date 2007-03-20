@@ -1,5 +1,8 @@
 Revision history for Perl extension SWF::Builder.
 
+0.16 Wed Mar 21 00:19:31 2007
+	- Fixed typo in SWF::B::Character. (Thanks to YOSHITAKE Ryo)
+
 0.15 Sat Oct 29 00:00:00 2006
 	- Fixed compiling GetURL function. (Thanks to Igor Semenov)
 	- Fixed typo in SWF::B::C::Bitmap.pm. (Thanks to Gordon McCreight)

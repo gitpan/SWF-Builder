@@ -7,7 +7,7 @@ use SWF::Element;
 use SWF::Builder::ExElement;
 use SWF::Builder;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 sub _init_character {
     my $self = shift;
@@ -141,7 +141,7 @@ sub place {
 	my $refitem = _search_sibling($parent, $param{below}) or croak "Can't place the item below what on the different movieclip";
 	$depth = SWF::Builder::Depth->new($disp_i, $refitem->{_depth}{_lower});
     } elsif (exists $param{above}) {
-	my $refitem = _search_sibling($parent, $param{below}) or croak "Can't place the item above what on the different movieclip";
+	my $refitem = _search_sibling($parent, $param{above}) or croak "Can't place the item above what on the different movieclip";
 	$depth = SWF::Builder::Depth->new($disp_i, $refitem->{_depth});
     } else {
 	$depth = SWF::Builder::Depth->new($disp_i, $parent->{_depth_list}{_lower});
